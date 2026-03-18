@@ -1,13 +1,13 @@
 # Observational Memory System — Design Spec
 
 **Date:** 2026-03-18
-**Status:** Approved
+**Status:** Approved (observer/reflector extraction prompts are stubs — quality iteration is a separate workstream)
 
 ---
 
 ## Overview
 
-A personal observational memory system inspired by Mastra's OM pattern. Two background agents (Observer and Reflector) maintain a compressed memory of Jeremy's preferences, corrections, and working patterns — per-project and globally — in a format any AI agent can read.
+A personal observational memory system inspired by Mastra's OM pattern. Two background scripts (Observer and Reflector) maintain a compressed memory of Jeremy's preferences, corrections, and working patterns — per-project and globally — in a format any AI agent can read.
 
 The system is portable: no lock-in to Claude Code or any single agent medium. A skill file acts as the universal interface. Files are plain markdown (synthesized) and JSONL (raw logs), stored in this repository.
 
@@ -28,23 +28,28 @@ The system is portable: no lock-in to Claude Code or any single agent medium. A 
 ```
 jg-observational-memory/
 ├── memory/
-│   ├── global.md                    # Cross-project me-isms (synthesized prose)
+│   ├── global.md                              # Cross-project me-isms (synthesized prose)
 │   ├── logs/
-│   │   ├── global.jsonl             # Raw cross-project observation log
-│   │   └── projects/
-│   │       ├── dg2.jsonl
-│   │       └── {project-slug}.jsonl
+│   │   ├── global.jsonl                       # Raw cross-project observation log
+│   │   ├── .cursors/
+│   │   │   ├── global                         # Line count of last processed global entry
+│   │   │   └── {memory-slug}                  # Line count of last processed entry per project
+│   │   ├── projects/
+│   │   │   └── {memory-slug}.jsonl            # Raw per-project observation log
+│   │   └── archive/
+│   │       └── {memory-slug}-{timestamp}.jsonl # Archived entries after reflection
 │   └── projects/
-│       ├── dg2.md                   # Synthesized prose per project
-│       └── {project-slug}.md
+│       └── {memory-slug}.md                   # Synthesized prose per project
 ├── skills/
-│   └── jg-context.md               # Universal skill loaded by any agent
+│   └── jg-context.md                         # Universal skill loaded by any agent
 ├── observer/
-│   ├── observe.py                   # Called by CC session-stop hook
-│   └── reflect.py                  # Consolidates JSONL → dense prose
+│   ├── observe.py                             # Called by CC Stop hook
+│   └── reflect.py                            # Consolidates JSONL → dense prose
+├── scripts/
+│   └── bootstrap-project.sh                  # Creates CLAUDE.md for a new project
 ├── ui/
-│   ├── server.js                    # Fastify server (reads memory files from disk)
-│   └── src/                         # Vite + React frontend
+│   ├── server.js                              # Fastify API server
+│   └── src/                                  # Vite + React frontend
 └── docs/
     └── superpowers/specs/
         └── 2026-03-18-observational-memory-design.md
@@ -52,50 +57,95 @@ jg-observational-memory/
 
 ---
 
+## Slug Conventions
+
+Two slug concepts are used. It is important not to conflate them:
+
+**CC slug** — Claude Code's internal project identifier. Derived by replacing all `/` in the full working directory path with `-`. Used only to locate the CC session transcript file.
+- Example: `/Users/jeremygatt/Projects/dg2` → `-Users-jeremygatt-Projects-dg2`
+- Used in: `~/.claude/projects/{cc-slug}/{session-id}.jsonl`
+
+**Memory slug** — Our own identifier for memory files. Derived from the working directory basename: lowercase, spaces and special characters replaced with `-`, leading/trailing `-` stripped.
+- Example: `/Users/jeremygatt/Projects/DG Chat Server` → `dg-chat-server`
+- Used in: `memory/projects/{memory-slug}.md`, `memory/logs/projects/{memory-slug}.jsonl`
+
+---
+
 ## Components
 
 ### 1. Observer (`observer/observe.py`)
 
-- Triggered by Claude Code session-stop hook
-- Reads conversation history from the CC session
-- Calls Claude Haiku API to extract observations about the user
-- Appends structured records to the appropriate project JSONL log
-- Cross-project observations also appended to `memory/logs/global.jsonl`
-- If log exceeds 100 entries, automatically triggers the Reflector
+**Trigger:** Claude Code `Stop` hook. Receives JSON payload on stdin containing `session_id` and `cwd` (working directory).
 
-**Note:** The observer extraction prompt is a known high-value TODO. The initial prompt will be a stub; quality iteration is a separate workstream.
+**Behavior:**
+1. Derive CC slug from `cwd` (replace `/` with `-`) to locate `~/.claude/projects/{cc-slug}/{session-id}.jsonl`
+2. Derive memory slug from `cwd` basename (normalize as above)
+3. Parse session JSONL to extract user messages and agent responses
+4. Call `claude-haiku-4-5-20251001` with the stub extraction prompt
+5. For each observation returned, determine `scope`: `"project"` or `"global"` (decided by the extraction prompt based on content generality)
+6. Append `scope: "project"` records to `memory/logs/projects/{memory-slug}.jsonl`
+7. Append `scope: "global"` records to `memory/logs/global.jsonl`
+8. Read cursor files to determine unprocessed entry counts independently for the project log and the global log. For each log where unprocessed entries exceed 100, invoke `reflect.py {slug}` as a separate fire-and-forget subprocess. Project log → `reflect.py {memory-slug}`. Global log → `reflect.py global`. Both may be invoked in the same session if both thresholds are exceeded.
+
+**Error handling:** All errors caught. Logged to `memory/logs/errors.log` with timestamp. Script always exits 0 — observation is best-effort and must never block the user session.
+
+**Extraction prompt:** Stub for phase 1. Returns JSON array of observation objects with fields `scope`, `type`, `content`. Prompt quality is a separate workstream.
 
 ### 2. Reflector (`observer/reflect.py`)
 
-- Triggered automatically when JSONL log exceeds 100 entries, or manually
-- Reads full JSONL log for a project (or global)
-- Calls Claude Haiku to synthesize into dense compressed prose
-- Overwrites `memory/projects/{slug}.md` (or `memory/global.md`)
-- Archives processed JSONL entries, retaining last 20 raw entries for debugging
-- Weights `correction` type observations more heavily than single-mention preferences
+**Trigger:** Invoked as fire-and-forget subprocess by Observer, or manually via `python observer/reflect.py {memory-slug}`. Pass `global` as the slug to reflect the global log.
+
+**Processing unprocessed entries:** The cursor file at `memory/logs/.cursors/{memory-slug}` stores the line count of the last processed entry. Unprocessed entries are all lines after that cursor. After reflection, the cursor is updated.
+
+**Synthesized file paths:**
+- Project: `memory/projects/{slug}.md`
+- Global: `memory/global.md` (not inside `memory/projects/`)
+
+**Behavior:**
+1. Read cursor file (`memory/logs/.cursors/{slug}`) to get line count of last processed entry. All lines after that index are unprocessed.
+2. Read the synthesized `.md` file for this slug (see paths above) if it exists — this is the current state to update.
+3. Call `claude-haiku-4-5-20251001` with both the existing prose and the unprocessed entries; produce a single revised dense prose document (full rewrite, not an append).
+4. `correction` type entries are prefixed with `[CORRECTION]` in the prompt. The Reflector prompt instructs the model to treat these as firm rules, not soft preferences.
+5. Overwrite the synthesized `.md` file with the new output.
+6. Archive: write all entries from line 1 through the cursor (the previously-processed entries) to `memory/logs/archive/{slug}-{iso-timestamp}.jsonl`. The unprocessed entries stay in the active log.
+7. Truncate the active log to retain only the last 20 entries (by timestamp) from the unprocessed batch. These become the context seed for the next reflection cycle. Reset the cursor file to `0` — all retained entries are now unprocessed seeds.
+8. If synthesized output would exceed 2000 tokens (estimated as `len(text) / 4`), the Reflector must compress the existing prose further as part of the same rewrite call before writing.
+
+**Archive naming for global log:** `memory/logs/archive/global-{iso-timestamp}.jsonl`
+
+**Error handling:** Errors logged to `memory/logs/errors.log`, never fatal.
 
 ### 3. Skill (`skills/jg-context.md`)
 
-- Portable markdown skill loadable by any agent (Claude Code, Cursor, etc.)
-- Instructs the agent to:
-  - Always read `memory/global.md`
-  - Detect project slug from current working directory name
-  - Load `memory/projects/{slug}.md` if it exists
-  - Treat both files as behavioral rules, not suggestions
+A portable markdown skill loadable by any agent. Instructions:
 
-### 4. Claude Code Bootstrap
+1. Read `memory/global.md` from `~/Projects/jg-observational-memory/` — **this path is hardcoded for this machine**. If the repo is cloned to a different path, update this line accordingly.
+2. Derive memory slug from current working directory basename (lowercase, special chars → `-`)
+3. If `memory/projects/{slug}.md` exists, read it
+4. Inject global content first, then project content
+5. When project and global rules conflict, **project rules take precedence** — the model should treat later-injected project content as the authoritative override
+6. Treat all content as behavioral rules, not suggestions
 
-- A global CC memory entry instructs: at the start of any new project, create a `CLAUDE.md` that loads the `jg-context` skill and points to this repository
-- Self-propagating: every new CC project inherits the memory system automatically
+**For non-CC agents:** Wiring (e.g. adding to a Cursor system prompt) is manual per tool, but the skill behavior is identical.
+
+### 4. CC Bootstrap (`scripts/bootstrap-project.sh`)
+
+A shell script run manually once when starting work in a new project directory. Creates a `CLAUDE.md` in the current directory with:
+- An instruction to load the `jg-context` skill from `~/Projects/jg-observational-memory/skills/jg-context.md`
+- The global CC memory entry (added once to `~/.claude/CLAUDE.md`) reminds the user to run this script for any new project
 
 ### 5. Web UI (`ui/`)
 
-- Vite + React frontend, no external UI library
-- Small Fastify server reads memory files from disk and serves them to the frontend
-- Read-only — no write operations from the UI
-- **Dashboard view:** total token count across all files, projects tracked, total observations, last observation timestamp
-- **Project view:** synthesized prose, raw JSONL log with timestamp/type filters, token count
-- **Global view:** same as project view for `global.md` / `global.jsonl`
+**Architecture:** Fastify API server (`ui/server.js`) reads memory files from disk and exposes a REST API. Vite + React frontend. In development: Vite on port 5173, Fastify on port 3001, Vite proxy config routes `/api` to Fastify. In production: Fastify serves compiled `ui/dist/` bundle.
+
+**Token count calculation:** Estimated as `Math.floor(text.length / 4)` — character heuristic, no external dependencies.
+
+**Views:**
+- **Dashboard:** Total estimated token count across all memory files, number of projects tracked, total observations logged (sum of all JSONL line counts), last observation timestamp
+- **Project view:** Current synthesized prose, raw JSONL log entries with timestamp/type filters, estimated token count
+- **Global view:** Same as project view for `global.md` / `global.jsonl`
+
+Read-only. No write operations from the UI.
 
 ---
 
@@ -104,22 +154,28 @@ jg-observational-memory/
 ### Session End
 
 ```
-CC session stops
-  → session-stop hook fires observe.py
-  → observe.py reads conversation history from CC session
-  → calls Claude Haiku: extract observations about the user
-  → appends N records to memory/logs/projects/{slug}.jsonl
-  → cross-project observations → memory/logs/global.jsonl
-  → if log > 100 entries → triggers reflect.py
+CC Stop hook fires → JSON payload (session_id, cwd) to observe.py stdin
+  → derive CC slug (path → dashes) to find session transcript
+  → derive memory slug (basename normalization) for memory files
+  → read ~/.claude/projects/{cc-slug}/{session-id}.jsonl
+  → call Haiku: extract observations → [{scope, type, content}]
+  → append project-scoped observations to memory/logs/projects/{slug}.jsonl
+  → append global-scoped observations to memory/logs/global.jsonl
+  → check cursors; if unprocessed > 100 → fire-and-forget reflect.py {slug}
+  → errors → memory/logs/errors.log; always exit 0
 ```
 
 ### Reflection
 
 ```
-reflect.py reads full JSONL log
-  → calls Claude Haiku: synthesize into dense compressed prose rules
-  → overwrites memory/projects/{slug}.md (or global.md)
-  → archives processed entries, retains last 20 raw
+reflect.py {slug}
+  → read cursor → identify unprocessed entries (lines after cursor)
+  → read existing memory/projects/{slug}.md OR memory/global.md (for slug=global)
+  → call Haiku: full prose rewrite incorporating existing state + new entries
+    ([CORRECTION] entries → treated as firm rules)
+  → overwrite synthesized .md file
+  → archive entries 1..cursor → memory/logs/archive/{slug}-{timestamp}.jsonl
+  → truncate active log to last 20 unprocessed entries; reset cursor to 0
 ```
 
 ### Session Start (any agent)
@@ -127,9 +183,10 @@ reflect.py reads full JSONL log
 ```
 Agent loads jg-context skill
   → reads memory/global.md
-  → detects project slug from working directory
+  → derives memory slug from working directory basename
   → if memory/projects/{slug}.md exists → reads it
-  → treats both files as behavioral rules for the session
+  → injects global first, project second (project overrides on conflict)
+  → treats both as behavioral rules
 ```
 
 ---
@@ -141,24 +198,26 @@ Agent loads jg-context skill
   "ts": "2026-03-18T10:23:00Z",
   "session": "abc123",
   "project": "dg2",
+  "scope": "project | global",
   "type": "preference | correction | pattern | decision",
   "content": "user corrected agent: always use feature branches, never commit to main"
 }
 ```
 
 **Observation types:**
-- `preference` — something the user expressed they like/dislike
-- `correction` — the user had to correct or re-explain something to the agent
-- `pattern` — a recurring behavior or approach noticed across the session
-- `decision` — a project-specific decision made (architecture, tooling, etc.)
 
-Corrections are weighted more heavily during reflection — if the user had to say something twice, it's a stronger signal.
+| Type | Meaning |
+|---|---|
+| `preference` | Something the user expressed they like or dislike |
+| `correction` | The user had to correct or re-explain something to the agent |
+| `pattern` | A recurring behavior or approach observed across the session |
+| `decision` | A project-specific decision made (architecture, tooling, domain design) |
 
 ---
 
-## Memory File Format
+## Dense Compressed Prose Format
 
-Dense compressed prose, not verbose markdown. Prioritizes token efficiency.
+Flat, minimal prose — no headers, minimal punctuation, maximum information density. Target ~150–200 tokens per thematic group. No bullet lists. Labeled by topic prefix. Maximum file size ~2000 tokens (estimated as `len / 4`).
 
 **Example `global.md`:**
 ```
@@ -170,9 +229,15 @@ git: always feature branches. never commit to main. never reuse a merged branch.
 
 ---
 
+## Model
+
+Both Observer and Reflector pin to `claude-haiku-4-5-20251001`. Version is explicit in all API calls to prevent behavior drift.
+
+---
+
 ## Out of Scope (Phase 1)
 
-- Observer prompt quality (high-value TODO, separate iteration)
-- Vector/semantic retrieval (phase 2 if files grow large — sqlite-vec candidate)
+- Observer/Reflector extraction prompt quality (high-value TODO, separate iteration)
+- Vector/semantic retrieval (phase 2 candidate if files grow large — sqlite-vec)
 - Multi-machine sync (git push of this repo is sufficient for now)
 - Per-tool setup for non-CC agents (skill file handles behavior; wiring is manual)
