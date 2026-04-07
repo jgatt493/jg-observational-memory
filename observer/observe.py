@@ -71,10 +71,23 @@ def check_and_trigger_reflector(log_path: str, cursor_path: str, slug: str):
         )
 
 
-def extract_observations(messages: list[dict], project: str) -> list[dict]:
-    """Call Haiku to extract observations from conversation messages."""
+def strip_code_fences(text: str) -> str:
+    """Strip markdown code fences (e.g. ```json ... ```) from model output."""
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines)
+    return text
+
+
+def extract_observations(messages: list[dict], project: str) -> tuple[list[dict], dict | None]:
+    """Call Haiku to extract observations and interaction style from conversation.
+
+    Returns (observations_list, interaction_style_dict_or_None).
+    """
     if not messages:
-        return []
+        return [], None
     conversation = "\n".join(
         f"{'USER' if m['role'] == 'user' else 'ASSISTANT'}: {m['content']}"
         for m in messages
@@ -90,28 +103,32 @@ def extract_observations(messages: list[dict], project: str) -> list[dict]:
             )}
         ],
     )
-    text = response.content[0].text
-    # Strip markdown code fences if present (e.g. ```json ... ```)
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        # Remove first line (```json) and last line (```)
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        text = "\n".join(lines)
+    text = strip_code_fences(response.content[0].text)
     try:
-        observations = json.loads(text)
-        if not isinstance(observations, list):
-            return []
-        return [
-            obs for obs in observations
-            if isinstance(obs, dict)
-            and obs.get("scope") in ("global", "project")
-            and obs.get("type") in ("preference", "correction", "pattern", "decision")
-            and obs.get("content")
-        ]
+        parsed = json.loads(text)
     except json.JSONDecodeError:
         log_error(f"Failed to parse observer response as JSON: {text[:500]}")
-        return []
+        return [], None
+
+    # Handle new format: {"observations": [...], "interaction_style": {...}}
+    if isinstance(parsed, dict) and "observations" in parsed:
+        raw_obs = parsed.get("observations", [])
+        interaction_style = parsed.get("interaction_style")
+    elif isinstance(parsed, list):
+        # Backwards compat with old format (flat array)
+        raw_obs = parsed
+        interaction_style = None
+    else:
+        return [], None
+
+    observations = [
+        obs for obs in raw_obs
+        if isinstance(obs, dict)
+        and obs.get("scope") in ("global", "project")
+        and obs.get("type") in ("preference", "correction", "pattern", "decision")
+        and obs.get("content")
+    ]
+    return observations, interaction_style
 
 
 def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
@@ -120,18 +137,36 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
     messages = parse_session(session_path)
     if not messages:
         return None
-    observations = extract_observations(messages, slug)
-    if not observations:
-        return None
+    observations, interaction_style = extract_observations(messages, slug)
+
+    wrote_something = False
     project_obs = [o for o in observations if o["scope"] == "project"]
     global_obs = [o for o in observations if o["scope"] == "global"]
+
     if project_obs:
         project_log = os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl")
         append_observations(project_log, project_obs, session_id, slug)
+        wrote_something = True
     if global_obs:
         global_log = os.path.join(MEMORY_ROOT, "logs", "global.jsonl")
         append_observations(global_log, global_obs, session_id, slug)
-    return slug
+        wrote_something = True
+
+    # Write interaction style as a project-scoped record
+    if interaction_style and isinstance(interaction_style, dict):
+        style_record = [{
+            "scope": "project",
+            "type": "interaction_style",
+            "content": interaction_style,
+        }]
+        project_log = os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl")
+        append_observations(project_log, style_record, session_id, slug)
+        # Also write to global so the reflector can build cross-project profiles
+        global_log = os.path.join(MEMORY_ROOT, "logs", "global.jsonl")
+        append_observations(global_log, style_record, session_id, slug)
+        wrote_something = True
+
+    return slug if wrote_something else None
 
 
 def find_unobserved_sessions(cc_project_dir: str, observed: set[str]) -> list[tuple[str, str]]:

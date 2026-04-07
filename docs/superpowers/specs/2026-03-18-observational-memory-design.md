@@ -207,6 +207,61 @@ Agent loads jg-context skill
 
 ---
 
+## Interaction Style Scoring
+
+In addition to observations, the Observer extracts an **interaction style profile** per session — 7 axes scored 0.0–1.0 based on conversation content (not metadata like commit counts).
+
+### Axes
+
+| Axis | Signal |
+|---|---|
+| `expert` | Gives specific instructions, uses domain terminology, corrects the AI's approach, short directive prompts |
+| `inquisitive` | Asks why/how, explores options, wants explanations before acting |
+| `architectural` | Thinks in systems, asks about trade-offs and downstream effects, references other services/dependencies |
+| `precise` | References specific files/functions/lines, describes exact expected behavior, small targeted changes |
+| `scope_aware` | Pushes back on over-engineering, says "not now" or "out of scope", YAGNI instincts |
+| `risk_conscious` | Asks about failure modes, flags security/migration/data concerns, thinks about rollback |
+| `ai_led` | Defers decisions to the agent, asks for recommendations, "what do you think?", lets agent choose paths |
+
+### JSONL Record
+
+The Observer appends one additional record per session with `type: "interaction_style"`:
+
+```json
+{
+  "ts": "2026-03-18T10:23:00Z",
+  "session": "abc123",
+  "project": "dg2",
+  "scope": "project",
+  "type": "interaction_style",
+  "content": {
+    "expert": 0.8,
+    "inquisitive": 0.2,
+    "architectural": 0.6,
+    "precise": 0.9,
+    "scope_aware": 0.4,
+    "risk_conscious": 0.3,
+    "ai_led": 0.1,
+    "domain": "frontend"
+  }
+}
+```
+
+The `domain` field is a short label the Observer infers from the conversation (e.g., "frontend", "rust/networking", "infrastructure", "data-pipeline"). This allows the Reflector to build per-domain interaction profiles over time.
+
+### Reflector Integration
+
+The Reflector synthesizes interaction style records into the dense prose alongside behavioral rules:
+
+```
+interaction-style: frontend(expert, precise, scope-aware) — gives exact instructions, actively prunes scope creep.
+rust/networking(inquisitive, ai-led, architectural) — learning the domain but thinks in systems, defers architectural decisions.
+```
+
+Only axes scoring >= 0.5 on average across sessions for a domain are included in the synthesized prose. This prevents noise from one-off sessions.
+
+---
+
 ## Dense Compressed Prose Format
 
 Flat, minimal prose — no headers, minimal punctuation, maximum information density. Target ~150–200 tokens per thematic group. No bullet lists. Labeled by topic prefix. Maximum file size ~2000 tokens (estimated as `len / 4`).
