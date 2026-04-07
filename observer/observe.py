@@ -12,6 +12,7 @@ import anthropic
 from observer.slugs import cc_slug, memory_slug
 from observer.session_parser import parse_session
 from observer.prompts import OBSERVER_SYSTEM_PROMPT, OBSERVER_USER_PROMPT
+from observer.db import insert_observations, insert_interaction_style, is_session_observed
 
 MEMORY_ROOT = os.path.join(os.path.dirname(__file__), "..", "memory")
 REFLECTION_THRESHOLD = 100
@@ -141,20 +142,27 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
         return None
     observations, interaction_style = extract_observations(messages, slug)
 
-    wrote_something = False
+    if not observations and not interaction_style:
+        return None
+
+    # Write to Postgres
+    try:
+        if observations:
+            insert_observations(observations, session_id, slug)
+        if interaction_style and isinstance(interaction_style, dict):
+            insert_interaction_style(interaction_style, session_id, slug)
+    except Exception as e:
+        log_error(f"Postgres write failed for session {session_id}: {e}")
+
+    # Also write to JSONL (legacy, used by reflector until migrated)
     project_obs = [o for o in observations if o["scope"] == "project"]
     global_obs = [o for o in observations if o["scope"] == "global"]
-
     if project_obs:
         project_log = os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl")
         append_observations(project_log, project_obs, session_id, slug)
-        wrote_something = True
     if global_obs:
         global_log = os.path.join(MEMORY_ROOT, "logs", "global.jsonl")
         append_observations(global_log, global_obs, session_id, slug)
-        wrote_something = True
-
-    # Write interaction style as a project-scoped record
     if interaction_style and isinstance(interaction_style, dict):
         style_record = [{
             "scope": "project",
@@ -163,12 +171,10 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
         }]
         project_log = os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl")
         append_observations(project_log, style_record, session_id, slug)
-        # Also write to global so the reflector can build cross-project profiles
         global_log = os.path.join(MEMORY_ROOT, "logs", "global.jsonl")
         append_observations(global_log, style_record, session_id, slug)
-        wrote_something = True
 
-    return slug if wrote_something else None
+    return slug
 
 
 def find_unobserved_sessions(cc_project_dir: str, observed: set[str]) -> list[tuple[str, str]]:
