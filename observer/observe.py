@@ -91,6 +91,13 @@ def extract_observations(messages: list[dict], project: str) -> list[dict]:
         ],
     )
     text = response.content[0].text
+    # Strip markdown code fences if present (e.g. ```json ... ```)
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        # Remove first line (```json) and last line (```)
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines)
     try:
         observations = json.loads(text)
         if not isinstance(observations, list):
