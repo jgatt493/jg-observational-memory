@@ -79,19 +79,29 @@ def insert_interaction_style(style: dict, session_id: str, project: str):
         conn.close()
 
 
-def is_session_observed(session_id: str) -> bool:
-    """Check if a session has already been processed."""
+def mark_session_observed(session_id: str, project: str, had_observations: bool):
+    """Record that a session has been processed (even if no observations were extracted)."""
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM observations WHERE session_id = %s LIMIT 1",
-                (session_id,),
+                """INSERT INTO observed_sessions (session_id, project, ts, had_observations)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (session_id) DO NOTHING""",
+                (session_id, project, datetime.now(timezone.utc), had_observations),
             )
-            if cur.fetchone():
-                return True
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_session_observed(session_id: str) -> bool:
+    """Check if a session has already been attempted."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM interaction_styles WHERE session_id = %s LIMIT 1",
+                "SELECT 1 FROM observed_sessions WHERE session_id = %s LIMIT 1",
                 (session_id,),
             )
             return cur.fetchone() is not None

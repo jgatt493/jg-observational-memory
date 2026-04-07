@@ -12,7 +12,7 @@ import anthropic
 from observer.slugs import cc_slug, memory_slug
 from observer.session_parser import parse_session
 from observer.prompts import OBSERVER_SYSTEM_PROMPT, OBSERVER_USER_PROMPT
-from observer.db import insert_observations, insert_interaction_style, is_session_observed
+from observer.db import insert_observations, insert_interaction_style, is_session_observed, mark_session_observed
 
 MEMORY_ROOT = os.path.join(os.path.dirname(__file__), "..", "memory")
 REFLECTION_THRESHOLD = 100
@@ -94,6 +94,10 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
     """
     if not messages:
         return [], None
+    # Truncate very long conversations to avoid hitting context limits
+    # Keep first 5 + last 50 messages to capture initial context and recent patterns
+    if len(messages) > 60:
+        messages = messages[:5] + messages[-50:]
     conversation = "\n".join(
         f"{'USER' if m['role'] == 'user' else 'ASSISTANT'}: {m['content']}"
         for m in messages
@@ -101,7 +105,7 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
     client = anthropic.Anthropic()
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2048,
+        max_tokens=4096,
         system=OBSERVER_SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": OBSERVER_USER_PROMPT.format(
@@ -145,8 +149,7 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
         return None
     observations, interaction_style = extract_observations(messages, slug)
 
-    if not observations and not interaction_style:
-        return None
+    has_obs = bool(observations) or bool(interaction_style)
 
     # Write to Postgres
     try:
@@ -154,8 +157,12 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
             insert_observations(observations, session_id, slug)
         if interaction_style and isinstance(interaction_style, dict):
             insert_interaction_style(interaction_style, session_id, slug)
+        mark_session_observed(session_id, slug, has_obs)
     except Exception as e:
         log_error(f"Postgres write failed for session {session_id}: {e}")
+
+    if not has_obs:
+        return None
 
     # Also write to JSONL (legacy, used by reflector until migrated)
     project_obs = [o for o in observations if o["scope"] == "project"]
