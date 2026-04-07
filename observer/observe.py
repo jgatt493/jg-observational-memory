@@ -1,4 +1,6 @@
 """Observer: extracts observations from CC session transcripts."""
+from __future__ import annotations
+
 import json
 import os
 import subprocess
