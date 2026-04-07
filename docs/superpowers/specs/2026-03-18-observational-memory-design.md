@@ -47,9 +47,6 @@ jg-observational-memory/
 │   └── reflect.py                            # Consolidates JSONL → dense prose
 ├── scripts/
 │   └── bootstrap-project.sh                  # Creates CLAUDE.md for a new project
-├── ui/
-│   ├── server.js                              # Fastify API server
-│   └── src/                                  # Vite + React frontend
 └── docs/
     └── superpowers/specs/
         └── 2026-03-18-observational-memory-design.md
@@ -63,6 +60,7 @@ Two slug concepts are used. It is important not to conflate them:
 
 **CC slug** — Claude Code's internal project identifier. Derived by replacing all `/` in the full working directory path with `-`. Used only to locate the CC session transcript file.
 - Example: `/Users/jeremygatt/Projects/dg2` → `-Users-jeremygatt-Projects-dg2`
+- The leading `-` is correct and intentional — do **not** strip it. CC slug normalization is different from memory slug normalization.
 - Used in: `~/.claude/projects/{cc-slug}/{session-id}.jsonl`
 
 **Memory slug** — Our own identifier for memory files. Derived from the working directory basename: lowercase, spaces and special characters replaced with `-`, leading/trailing `-` stripped.
@@ -95,21 +93,23 @@ Two slug concepts are used. It is important not to conflate them:
 
 **Trigger:** Invoked as fire-and-forget subprocess by Observer, or manually via `python observer/reflect.py {memory-slug}`. Pass `global` as the slug to reflect the global log.
 
-**Processing unprocessed entries:** The cursor file at `memory/logs/.cursors/{memory-slug}` stores the line count of the last processed entry. Unprocessed entries are all lines after that cursor. After reflection, the cursor is updated.
+**Processing unprocessed entries:** The cursor file at `memory/logs/.cursors/{memory-slug}` stores a 1-based line number — the last line that was included in a previous reflection. Line `cursor + 1` through EOF are unprocessed. A cursor of `0` (or missing file) means all entries are unprocessed.
 
 **Synthesized file paths:**
 - Project: `memory/projects/{slug}.md`
 - Global: `memory/global.md` (not inside `memory/projects/`)
 
 **Behavior:**
-1. Read cursor file (`memory/logs/.cursors/{slug}`) to get line count of last processed entry. All lines after that index are unprocessed.
+1. Read cursor file (`memory/logs/.cursors/{slug}`). Lines `cursor+1` through EOF are unprocessed.
 2. Read the synthesized `.md` file for this slug (see paths above) if it exists — this is the current state to update.
-3. Call `claude-haiku-4-5-20251001` with both the existing prose and the unprocessed entries; produce a single revised dense prose document (full rewrite, not an append).
+3. Call `claude-haiku-4-5-20251001` with both the existing prose and the unprocessed entries. The prompt includes a hard constraint: output must not exceed 2000 tokens (~8000 chars). If existing prose + new material would exceed this, the model must compress the existing prose as part of the same rewrite. Output is a single revised dense prose document (full rewrite, not an append).
 4. `correction` type entries are prefixed with `[CORRECTION]` in the prompt. The Reflector prompt instructs the model to treat these as firm rules, not soft preferences.
-5. Overwrite the synthesized `.md` file with the new output.
-6. Archive: write all entries from line 1 through the cursor (the previously-processed entries) to `memory/logs/archive/{slug}-{iso-timestamp}.jsonl`. The unprocessed entries stay in the active log.
-7. Truncate the active log to retain only the last 20 entries (by timestamp) from the unprocessed batch. These become the context seed for the next reflection cycle. Reset the cursor file to `0` — all retained entries are now unprocessed seeds.
-8. If synthesized output would exceed 2000 tokens (estimated as `len(text) / 4`), the Reflector must compress the existing prose further as part of the same rewrite call before writing.
+5. Validate output length (`len(text) / 4 <= 2000`). If it still exceeds, make one retry call asking for further compression. If that also fails, write anyway and log a warning.
+6. Overwrite the synthesized `.md` file with the validated output.
+7. Archive the entire active log file to `memory/logs/archive/{slug}-{iso-timestamp}.jsonl`.
+8. Rewrite the active log to contain only the last 20 entries (by line position) from the file. These are context seeds for the next cycle. All of these entries have now been reflected, but they provide continuity. Reset cursor to `0`.
+
+**Note on step 8:** Entries beyond the last 20 are not lost — their content has been synthesized into the `.md` file and the full raw log is preserved in the archive. The 20 seeds provide continuity context for the next reflection, not completeness.
 
 **Archive naming for global log:** `memory/logs/archive/global-{iso-timestamp}.jsonl`
 
@@ -133,19 +133,6 @@ A portable markdown skill loadable by any agent. Instructions:
 A shell script run manually once when starting work in a new project directory. Creates a `CLAUDE.md` in the current directory with:
 - An instruction to load the `jg-context` skill from `~/Projects/jg-observational-memory/skills/jg-context.md`
 - The global CC memory entry (added once to `~/.claude/CLAUDE.md`) reminds the user to run this script for any new project
-
-### 5. Web UI (`ui/`)
-
-**Architecture:** Fastify API server (`ui/server.js`) reads memory files from disk and exposes a REST API. Vite + React frontend. In development: Vite on port 5173, Fastify on port 3001, Vite proxy config routes `/api` to Fastify. In production: Fastify serves compiled `ui/dist/` bundle.
-
-**Token count calculation:** Estimated as `Math.floor(text.length / 4)` — character heuristic, no external dependencies.
-
-**Views:**
-- **Dashboard:** Total estimated token count across all memory files, number of projects tracked, total observations logged (sum of all JSONL line counts), last observation timestamp
-- **Project view:** Current synthesized prose, raw JSONL log entries with timestamp/type filters, estimated token count
-- **Global view:** Same as project view for `global.md` / `global.jsonl`
-
-Read-only. No write operations from the UI.
 
 ---
 
