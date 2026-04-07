@@ -31,6 +31,7 @@ jg-observational-memory/
 │   ├── global.md                              # Cross-project me-isms (synthesized prose)
 │   ├── logs/
 │   │   ├── global.jsonl                       # Raw cross-project observation log
+│   │   ├── .observed-sessions              # Newline-delimited list of processed session IDs
 │   │   ├── .cursors/
 │   │   │   ├── global                         # Line count of last processed global entry
 │   │   │   └── {memory-slug}                  # Line count of last processed entry per project
@@ -84,6 +85,8 @@ Two slug concepts are used. It is important not to conflate them:
 6. Append `scope: "project"` records to `memory/logs/projects/{memory-slug}.jsonl`
 7. Append `scope: "global"` records to `memory/logs/global.jsonl`
 8. Read cursor files to determine unprocessed entry counts independently for the project log and the global log. For each log where unprocessed entries exceed 100, invoke `reflect.py {slug}` as a separate fire-and-forget subprocess. Project log → `reflect.py {memory-slug}`. Global log → `reflect.py global`. Both may be invoked in the same session if both thresholds are exceeded.
+
+**Catch-up for missed sessions:** The Stop hook only fires on clean agent stops — killed terminals skip it. To handle this, the Observer maintains `memory/logs/.observed-sessions` (a newline-delimited list of session IDs already processed). On each run, after processing the current session, the Observer scans `~/.claude/projects/{cc-slug}/` for any `.jsonl` session files whose IDs are not in `.observed-sessions` and processes them too. This makes the system self-healing — missed sessions are caught up on the next clean stop.
 
 **Error handling:** All errors caught. Logged to `memory/logs/errors.log` with timestamp. Script always exits 0 — observation is best-effort and must never block the user session.
 
@@ -148,6 +151,8 @@ CC Stop hook fires → JSON payload (session_id, cwd) to observe.py stdin
   → call Haiku: extract observations → [{scope, type, content}]
   → append project-scoped observations to memory/logs/projects/{slug}.jsonl
   → append global-scoped observations to memory/logs/global.jsonl
+  → add session ID to memory/logs/.observed-sessions
+  → scan ~/.claude/projects/{cc-slug}/ for unobserved sessions → process those too
   → check cursors; if unprocessed > 100 → fire-and-forget reflect.py {slug}
   → errors → memory/logs/errors.log; always exit 0
 ```
