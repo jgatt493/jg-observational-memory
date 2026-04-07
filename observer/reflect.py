@@ -74,6 +74,20 @@ def archive_and_truncate(log_path: str, archive_dir: str, cursor_path: str, slug
         f.write("0")
 
 
+def compress_prose(prose: str) -> str:
+    """Ask Haiku to compress prose that exceeds the size limit."""
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2048,
+        system="You are a compression agent. Take the provided text and compress it to fit within 8000 characters while preserving all important behavioral rules. Maintain the dense prose format with topic-prefix labels. Prioritize [CORRECTION] items.",
+        messages=[
+            {"role": "user", "content": f"Compress this text to under 8000 characters:\n\n{prose}"}
+        ],
+    )
+    return response.content[0].text
+
+
 def synthesize(existing_prose: str, entries: list[dict]) -> str:
     """Call Haiku to synthesize observations into dense prose."""
     observations_text = "\n".join(
@@ -130,10 +144,7 @@ def main():
     # Validate length, retry once if too long
     if not validate_token_length(new_prose):
         log_error(f"Synthesis for {slug} exceeded {MAX_CHARS} chars ({len(new_prose)}), retrying with compression")
-        new_prose = synthesize(
-            new_prose,
-            [{"type": "pattern", "content": "SYSTEM: Previous output was too long. Compress further. Max 8000 characters."}],
-        )
+        new_prose = compress_prose(new_prose)
         if not validate_token_length(new_prose):
             log_error(f"Synthesis for {slug} still exceeds limit after retry ({len(new_prose)}), writing anyway")
 

@@ -77,3 +77,12 @@ def test_validate_token_length():
     assert validate_token_length(short) is True
     long = "x" * 9000
     assert validate_token_length(long) is False
+
+
+def test_compress_prose_is_callable():
+    """Verify compress_prose exists and accepts a string."""
+    from observer.reflect import compress_prose
+    # Just verify it's importable and has the right signature
+    import inspect
+    sig = inspect.signature(compress_prose)
+    assert len(sig.parameters) == 1
