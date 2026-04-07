@@ -3,11 +3,9 @@ import os
 import tempfile
 from unittest.mock import patch, MagicMock
 from observer.observe import (
-    process_session,
     append_observations,
-    load_observed_sessions,
-    save_observed_session,
     check_and_trigger_reflector,
+    cwd_from_session_file,
 )
 
 
@@ -38,25 +36,6 @@ def test_append_observations_appends(tmp_path):
     assert len(lines) == 2
 
 
-def test_load_observed_sessions_empty(tmp_path):
-    path = tmp_path / ".observed-sessions"
-    result = load_observed_sessions(str(path))
-    assert result == set()
-
-
-def test_load_observed_sessions_existing(tmp_path):
-    path = tmp_path / ".observed-sessions"
-    path.write_text("session-1\nsession-2\n")
-    result = load_observed_sessions(str(path))
-    assert result == {"session-1", "session-2"}
-
-
-def test_save_observed_session(tmp_path):
-    path = tmp_path / ".observed-sessions"
-    save_observed_session(str(path), "new-session")
-    assert "new-session" in path.read_text()
-
-
 def test_check_and_trigger_reflector_below_threshold(tmp_path):
     log_path = tmp_path / "test.jsonl"
     cursor_path = tmp_path / "cursor"
@@ -75,3 +54,23 @@ def test_check_and_trigger_reflector_above_threshold(tmp_path):
     with patch("observer.observe.subprocess") as mock_sub:
         check_and_trigger_reflector(str(log_path), str(cursor_path), "slug")
         mock_sub.Popen.assert_called_once()
+
+
+def test_cwd_from_session_file(tmp_path):
+    session = tmp_path / "test.jsonl"
+    session.write_text(json.dumps({
+        "type": "progress",
+        "cwd": "/Users/test/Projects/myapp",
+        "sessionId": "abc123",
+    }) + "\n")
+    assert cwd_from_session_file(str(session)) == "/Users/test/Projects/myapp"
+
+
+def test_cwd_from_session_file_missing():
+    assert cwd_from_session_file("/nonexistent/file.jsonl") is None
+
+
+def test_cwd_from_session_file_no_cwd(tmp_path):
+    session = tmp_path / "test.jsonl"
+    session.write_text(json.dumps({"type": "system"}) + "\n")
+    assert cwd_from_session_file(str(session)) is None

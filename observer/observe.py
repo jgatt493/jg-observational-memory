@@ -26,18 +26,21 @@ def log_error(msg: str):
         f.write(f"[{datetime.now(timezone.utc).isoformat()}] {msg}\n")
 
 
-def load_observed_sessions(path: str) -> set[str]:
+def cwd_from_session_file(path: str) -> str | None:
+    """Extract the cwd from the first record in a CC session JSONL file."""
     try:
         with open(path) as f:
-            return {line.strip() for line in f if line.strip()}
-    except FileNotFoundError:
-        return set()
-
-
-def save_observed_session(path: str, session_id: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a") as f:
-        f.write(session_id + "\n")
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                cwd = record.get("cwd")
+                if cwd:
+                    return cwd
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return None
 
 
 def append_observations(log_path: str, observations: list[dict], session_id: str, project: str):
@@ -191,6 +194,27 @@ def find_unobserved_sessions(cc_project_dir: str, observed: set[str]) -> list[tu
     return unobserved
 
 
+def find_all_cc_sessions() -> list[tuple[str, str]]:
+    """Scan all CC project directories for session JSONL files.
+
+    Returns list of (session_id, file_path) across all projects.
+    """
+    cc_projects_root = os.path.expanduser("~/.claude/projects")
+    sessions = []
+    try:
+        for project_dir_name in os.listdir(cc_projects_root):
+            project_dir = os.path.join(cc_projects_root, project_dir_name)
+            if not os.path.isdir(project_dir):
+                continue
+            for fname in os.listdir(project_dir):
+                if fname.endswith(".jsonl"):
+                    sid = fname.removesuffix(".jsonl")
+                    sessions.append((sid, os.path.join(project_dir, fname)))
+    except FileNotFoundError:
+        pass
+    return sessions
+
+
 def main():
     try:
         payload = json.loads(sys.stdin.read())
@@ -206,33 +230,40 @@ def main():
 
     cc_project_slug = cc_slug(cwd)
     cc_project_dir = os.path.expanduser(f"~/.claude/projects/{cc_project_slug}")
-    observed_path = os.path.join(MEMORY_ROOT, "logs", ".observed-sessions")
-    observed = load_observed_sessions(observed_path)
+    slugs_written = set()
 
     # Process current session
     session_path = os.path.join(cc_project_dir, f"{session_id}.jsonl")
-    slug = None
-    if session_id not in observed:
+    if not is_session_observed(session_id):
         slug = process_session(session_path, session_id, cwd)
-        save_observed_session(observed_path, session_id)
+        if slug:
+            slugs_written.add(slug)
 
-    # Catch up missed sessions
-    for sid, spath in find_unobserved_sessions(cc_project_dir, observed | {session_id}):
+    # Catch up missed sessions across ALL projects
+    for sid, spath in find_all_cc_sessions():
+        if sid == session_id:
+            continue
         try:
-            result = process_session(spath, sid, cwd)
-            if result is not None:
-                slug = result
-            save_observed_session(observed_path, sid)
+            if is_session_observed(sid):
+                continue
+            # Derive cwd from the session file itself
+            session_cwd = cwd_from_session_file(spath)
+            if not session_cwd:
+                continue
+            slug = process_session(spath, sid, session_cwd)
+            if slug:
+                slugs_written.add(slug)
         except Exception as e:
             log_error(f"Error processing missed session {sid}: {e}")
 
-    # After all sessions are processed, check reflection thresholds once
-    if slug is not None:
+    # After all sessions are processed, check reflection thresholds per project
+    for slug in slugs_written:
         check_and_trigger_reflector(
             os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl"),
             os.path.join(MEMORY_ROOT, "logs", ".cursors", slug),
             slug,
         )
+    if slugs_written:
         check_and_trigger_reflector(
             os.path.join(MEMORY_ROOT, "logs", "global.jsonl"),
             os.path.join(MEMORY_ROOT, "logs", ".cursors", "global"),
