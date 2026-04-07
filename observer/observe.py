@@ -107,15 +107,15 @@ def extract_observations(messages: list[dict], project: str) -> list[dict]:
         return []
 
 
-def process_session(session_path: str, session_id: str, cwd: str):
-    """Process a single session transcript."""
+def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
+    """Process a single session transcript. Returns the memory slug if observations were written."""
     slug = memory_slug(cwd)
     messages = parse_session(session_path)
     if not messages:
-        return
+        return None
     observations = extract_observations(messages, slug)
     if not observations:
-        return
+        return None
     project_obs = [o for o in observations if o["scope"] == "project"]
     global_obs = [o for o in observations if o["scope"] == "global"]
     if project_obs:
@@ -124,19 +124,7 @@ def process_session(session_path: str, session_id: str, cwd: str):
     if global_obs:
         global_log = os.path.join(MEMORY_ROOT, "logs", "global.jsonl")
         append_observations(global_log, global_obs, session_id, slug)
-    # Check reflection thresholds
-    if project_obs:
-        check_and_trigger_reflector(
-            os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl"),
-            os.path.join(MEMORY_ROOT, "logs", ".cursors", slug),
-            slug,
-        )
-    if global_obs:
-        check_and_trigger_reflector(
-            os.path.join(MEMORY_ROOT, "logs", "global.jsonl"),
-            os.path.join(MEMORY_ROOT, "logs", ".cursors", "global"),
-            "global",
-        )
+    return slug
 
 
 def find_unobserved_sessions(cc_project_dir: str, observed: set[str]) -> list[tuple[str, str]]:
@@ -173,17 +161,33 @@ def main():
 
     # Process current session
     session_path = os.path.join(cc_project_dir, f"{session_id}.jsonl")
+    slug = None
     if session_id not in observed:
-        process_session(session_path, session_id, cwd)
+        slug = process_session(session_path, session_id, cwd)
         save_observed_session(observed_path, session_id)
 
     # Catch up missed sessions
     for sid, spath in find_unobserved_sessions(cc_project_dir, observed | {session_id}):
         try:
-            process_session(spath, sid, cwd)
+            result = process_session(spath, sid, cwd)
+            if result is not None:
+                slug = result
             save_observed_session(observed_path, sid)
         except Exception as e:
             log_error(f"Error processing missed session {sid}: {e}")
+
+    # After all sessions are processed, check reflection thresholds once
+    if slug is not None:
+        check_and_trigger_reflector(
+            os.path.join(MEMORY_ROOT, "logs", "projects", f"{slug}.jsonl"),
+            os.path.join(MEMORY_ROOT, "logs", ".cursors", slug),
+            slug,
+        )
+        check_and_trigger_reflector(
+            os.path.join(MEMORY_ROOT, "logs", "global.jsonl"),
+            os.path.join(MEMORY_ROOT, "logs", ".cursors", "global"),
+            "global",
+        )
 
 
 if __name__ == "__main__":

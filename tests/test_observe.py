@@ -24,6 +24,8 @@ def test_append_observations_creates_file(tmp_path):
     assert record["type"] == "preference"
     assert record["session"] == "test-session"
     assert record["project"] == "myproject"
+    assert record["scope"] == "project"
+    assert record["content"] == "likes feature branches"
     assert "ts" in record
 
 
