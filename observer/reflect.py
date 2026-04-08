@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import anthropic
 
 from observer.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT
+from observer.db import get_observations_for_project, get_global_observations, get_all_projects
 
 MEMORY_ROOT = os.path.join(os.path.dirname(__file__), "..", "memory")
 MODEL = "claude-haiku-4-5-20251001"
@@ -124,7 +125,67 @@ def resolve_paths(slug: str) -> tuple[str, str, str, str]:
     return log_path, cursor_path, md_path, archive_dir
 
 
+def reflect_slug(slug: str, entries: list[dict]):
+    """Run reflection for a single slug with given entries. Writes the .md file."""
+    if not entries:
+        return
+
+    if slug == "global":
+        md_path = os.path.join(MEMORY_ROOT, "global.md")
+    else:
+        md_path = os.path.join(MEMORY_ROOT, "projects", f"{slug}.md")
+
+    existing_prose = read_synthesized_prose(md_path)
+    new_prose = synthesize(existing_prose, entries)
+
+    if not validate_token_length(new_prose):
+        log_error(f"Synthesis for {slug} exceeded {MAX_CHARS} chars ({len(new_prose)}), retrying with compression")
+        new_prose = compress_prose(new_prose)
+        if not validate_token_length(new_prose):
+            log_error(f"Synthesis for {slug} still exceeds limit after retry ({len(new_prose)}), writing anyway")
+
+    os.makedirs(os.path.dirname(md_path), exist_ok=True)
+    with open(md_path, "w") as f:
+        f.write(new_prose)
+
+    print(f"  {slug}: {len(entries)} observations -> {len(new_prose)} chars")
+
+
 def main():
+    from_db = "--from-db" in sys.argv
+    reflect_all = "--all" in sys.argv
+
+    if from_db and reflect_all:
+        # Reflect all projects + global from Postgres
+        projects = get_all_projects()
+        print(f"Reflecting {len(projects)} projects + global from DB...")
+
+        # Global
+        global_entries = get_global_observations()
+        reflect_slug("global", global_entries)
+
+        # Per-project
+        for project in projects:
+            entries = get_observations_for_project(project)
+            reflect_slug(project, entries)
+
+        print("Done.")
+        sys.exit(0)
+
+    if from_db:
+        # Reflect a single slug from Postgres
+        slug = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else None
+        if not slug:
+            log_error("reflect.py --from-db requires a slug argument (or use --all)")
+            sys.exit(0)
+        if slug == "global":
+            entries = get_global_observations()
+        else:
+            entries = get_observations_for_project(slug)
+        reflect_slug(slug, entries)
+        sys.exit(0)
+
+    # Legacy: read from JSONL files
     if len(sys.argv) < 2:
         log_error("reflect.py requires a slug argument")
         sys.exit(0)
@@ -137,26 +198,11 @@ def main():
 
     cursor = read_cursor(cursor_path)
     entries = get_unprocessed_entries(log_path, cursor)
-    if not entries:
-        sys.exit(0)
+    reflect_slug(slug, entries)
 
-    existing_prose = read_synthesized_prose(md_path)
-    new_prose = synthesize(existing_prose, entries)
-
-    # Validate length, retry once if too long
-    if not validate_token_length(new_prose):
-        log_error(f"Synthesis for {slug} exceeded {MAX_CHARS} chars ({len(new_prose)}), retrying with compression")
-        new_prose = compress_prose(new_prose)
-        if not validate_token_length(new_prose):
-            log_error(f"Synthesis for {slug} still exceeds limit after retry ({len(new_prose)}), writing anyway")
-
-    # Write synthesized prose
-    os.makedirs(os.path.dirname(md_path), exist_ok=True)
-    with open(md_path, "w") as f:
-        f.write(new_prose)
-
-    # Archive and truncate
-    archive_and_truncate(log_path, archive_dir, cursor_path, slug)
+    # Archive and truncate JSONL
+    if entries:
+        archive_and_truncate(log_path, archive_dir, cursor_path, slug)
 
 
 if __name__ == "__main__":

@@ -95,6 +95,44 @@ def mark_session_observed(session_id: str, project: str, had_observations: bool)
         conn.close()
 
 
+def get_observations_for_project(project: str) -> list[dict]:
+    """Get all observations for a project."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT scope, type, content FROM observations WHERE project = %s ORDER BY ts",
+                (project,),
+            )
+            return [{"scope": r[0], "type": r[1], "content": r[2]} for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_global_observations() -> list[dict]:
+    """Get all global-scoped observations across all projects."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT scope, type, content FROM observations WHERE scope = 'global' ORDER BY ts",
+            )
+            return [{"scope": r[0], "type": r[1], "content": r[2]} for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_all_projects() -> list[str]:
+    """Get all project slugs that have observations."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT project FROM observations ORDER BY project")
+            return [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def is_session_observed(session_id: str) -> bool:
     """Check if a session has already been attempted."""
     conn = get_connection()
