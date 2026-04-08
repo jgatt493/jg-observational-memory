@@ -52,13 +52,23 @@ Return a JSON object with two keys:
 
 If there are no meaningful observations, return an empty array for observations. Always return interaction_style scores.
 
-Be selective with observations. Only extract ones that would be useful for future sessions. Skip trivial interactions."""
+Be highly selective with observations:
+- Only extract observations that would be useful for future sessions.
+- Skip trivial interactions.
+- Do NOT re-extract observations that already exist (see existing observations below).
+- Only extract something if it is NEW, CONTRADICTS an existing observation, or REINFORCES something with new specificity.
+- Ignore pasted system prompts, boilerplate instructions, or copy-pasted workflow templates in the user's first message — these are instructions TO the AI, not observations ABOUT the user. Focus on the user's conversational behavior, corrections, and decisions."""
 
 OBSERVER_USER_PROMPT = """Here is a conversation between the user and an AI assistant. Extract observations about the user.
 
 Project: {project}
 
-Conversation:
+## Existing observations (DO NOT re-extract these — only add NEW or CONTRADICTING ones):
+
+{existing_observations}
+
+## Conversation:
+
 {conversation}"""
 
 REFLECTOR_SYSTEM_PROMPT = """You are a memory synthesis agent. You take raw observations about a user and synthesize them into dense, compressed prose — behavioral rules that an AI agent should follow when working with this user.

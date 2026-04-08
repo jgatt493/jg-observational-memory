@@ -12,7 +12,7 @@ import anthropic
 from observer.slugs import cc_slug, memory_slug
 from observer.session_parser import parse_session
 from observer.prompts import OBSERVER_SYSTEM_PROMPT, OBSERVER_USER_PROMPT
-from observer.db import insert_observations, insert_interaction_style, is_session_observed, mark_session_observed
+from observer.db import insert_observations, insert_interaction_style, is_session_observed, mark_session_observed, get_observations_for_project, get_global_observations
 
 MEMORY_ROOT = os.path.join(os.path.dirname(__file__), "..", "memory")
 REFLECTION_THRESHOLD = 100
@@ -87,6 +87,31 @@ def strip_code_fences(text: str) -> str:
     return text
 
 
+def get_existing_observations_summary(project: str) -> str:
+    """Build a summary of existing observations for dedup context."""
+    try:
+        project_obs = get_observations_for_project(project)
+        global_obs = get_global_observations()
+    except Exception:
+        return ""
+
+    # Deduplicate by content and take unique entries
+    seen = set()
+    unique = []
+    for obs in project_obs + global_obs:
+        if obs["content"] not in seen:
+            seen.add(obs["content"])
+            unique.append(obs)
+
+    if not unique:
+        return ""
+
+    # Truncate to last 50 unique observations to avoid blowing up the prompt
+    recent = unique[-50:]
+    lines = [f"- [{o['type']}] {o['content']}" for o in recent]
+    return "\n".join(lines)
+
+
 def extract_observations(messages: list[dict], project: str) -> tuple[list[dict], dict | None]:
     """Call Haiku to extract observations and interaction style from conversation.
 
@@ -102,6 +127,10 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
         f"{'USER' if m['role'] == 'user' else 'ASSISTANT'}: {m['content']}"
         for m in messages
     )
+
+    # Build dedup context from existing observations
+    existing_summary = get_existing_observations_summary(project)
+
     client = anthropic.Anthropic()
     response = client.messages.create(
         model=MODEL,
@@ -109,7 +138,9 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
         system=OBSERVER_SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": OBSERVER_USER_PROMPT.format(
-                project=project, conversation=conversation
+                project=project,
+                conversation=conversation,
+                existing_observations=existing_summary,
             )}
         ],
     )
