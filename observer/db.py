@@ -133,6 +133,26 @@ def get_all_projects() -> list[str]:
         conn.close()
 
 
+def upsert_reflection(slug: str, prose: str, observation_count: int):
+    """Store or update the synthesized prose for a project/global slug."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO reflections (slug, prose, char_count, observation_count, ts)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON CONFLICT (slug) DO UPDATE SET
+                     prose = EXCLUDED.prose,
+                     char_count = EXCLUDED.char_count,
+                     observation_count = EXCLUDED.observation_count,
+                     ts = EXCLUDED.ts""",
+                (slug, prose, len(prose), observation_count, datetime.now(timezone.utc)),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def is_session_observed(session_id: str) -> bool:
     """Check if a session has already been attempted."""
     conn = get_connection()

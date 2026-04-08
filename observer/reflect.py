@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import anthropic
 
 from observer.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT
-from observer.db import get_observations_for_project, get_global_observations, get_all_projects
+from observer.db import get_observations_for_project, get_global_observations, get_all_projects, upsert_reflection
 
 MEMORY_ROOT = os.path.join(os.path.dirname(__file__), "..", "memory")
 MODEL = "claude-haiku-4-5-20251001"
@@ -147,6 +147,12 @@ def reflect_slug(slug: str, entries: list[dict]):
     os.makedirs(os.path.dirname(md_path), exist_ok=True)
     with open(md_path, "w") as f:
         f.write(new_prose)
+
+    # Also store in Postgres for dashboard access
+    try:
+        upsert_reflection(slug, new_prose, len(entries))
+    except Exception as e:
+        log_error(f"Failed to upsert reflection for {slug}: {e}")
 
     print(f"  {slug}: {len(entries)} observations -> {len(new_prose)} chars")
 
