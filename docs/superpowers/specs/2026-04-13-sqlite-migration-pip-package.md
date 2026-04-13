@@ -115,6 +115,7 @@ observational-memory/
 ├── src/
 │   └── observational_memory/
 │       ├── __init__.py         # Version constant
+│       ├── __main__.py         # Delegates to cli.main() for `python -m observational_memory`
 │       ├── cli.py              # CLI entry points (install, uninstall, backfill, reflect)
 │       ├── db.py               # SQLite layer
 │       ├── observe.py          # Observer (CC Stop hook entrypoint)
@@ -254,10 +255,13 @@ The reflector currently has three modes: legacy JSONL-based, `--from-db` single 
 - CLI routes to `reflect_slug()` directly with entries from `get_observations_for_project()` / `get_global_observations()`
 
 **What changes in `observe.py`:**
-- Remove `check_and_trigger_reflector()` (depends on JSONL line counts)
+- Replace `check_and_trigger_reflector()` with `maybe_trigger_reflection(slug)` — a new function that:
+  1. Queries SQLite: `SELECT COUNT(*) FROM observations WHERE project = ? AND id > (SELECT COALESCE(last_observation_id, 0) FROM reflections WHERE slug = ?)`
+  2. If count > `REFLECTION_THRESHOLD` (100, same as current), fires reflector as subprocess
+  3. Subprocess invocation: `subprocess.Popen([sys.executable, "-m", "observational_memory.reflect", slug])`
+  4. Called for each project slug that had observations written, and once for "global" — same pattern as current code
 - Remove JSONL dual-write (`append_observations` and all JSONL log writing)
-- Reflection is now triggered by a count query against SQLite: `SELECT COUNT(*) FROM observations WHERE project = ? AND id > (SELECT COALESCE(MAX(last_observation_id), 0) FROM reflections WHERE slug = ?)`. Add `last_observation_id` column to `reflections` table.
-- The subprocess invocation changes from `subprocess.Popen([sys.executable, reflect_script, slug])` to `subprocess.Popen([sys.executable, "-m", "observational_memory.reflect", slug])`
+- Add `last_observation_id` column to `reflections` table (used by the threshold query)
 
 **What's removed entirely:**
 - JSONL log files, cursor files, archive directory
@@ -276,7 +280,7 @@ The reflector currently has three modes: legacy JSONL-based, `--from-db` single 
 - `prompts.py`: unchanged
 - `session_parser.py`: unchanged
 - `slugs.py`: unchanged
-- All `db.py` function signatures: `insert_observations`, `insert_interaction_style`, `mark_session_observed`, `is_session_observed`, `get_observations_for_project`, `get_global_observations`, `get_all_projects`, `upsert_reflection`
+- Most `db.py` function signatures: `insert_observations`, `insert_interaction_style`, `mark_session_observed`, `is_session_observed`, `get_observations_for_project`, `get_global_observations`, `get_all_projects`. Exception: `upsert_reflection` gains a `last_observation_id` parameter
 - Model pinned to `claude-haiku-4-5-20251001`
 
 ---
