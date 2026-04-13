@@ -2,11 +2,13 @@
 __pycache__/
 *.pyc
 .venv/
-memory/logs/*.jsonl
-memory/logs/projects/*.jsonl
-memory/logs/archive/*.jsonl
-memory/logs/.observed-sessions
-memory/logs/.cursors/*
-memory/logs/errors.log
+dist/
+*.egg-info/
+
+# Generated memory files (personal data, not part of the package)
+memory/logs/
 memory/global.md
 memory/projects/*.md
+
+# Slides (separate content)
+slides/
