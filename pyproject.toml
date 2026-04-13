@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "observational-memory"
+version = "0.1.0"
+description = "Automatic behavioral profiling for Claude Code sessions"
+requires-python = ">=3.10"
+dependencies = ["anthropic>=0.49.0"]
+readme = "README.md"
+
+[project.scripts]
+observational-memory = "observational_memory.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/observational_memory"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
