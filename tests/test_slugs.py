@@ -1,4 +1,4 @@
-from observer.slugs import cc_slug, memory_slug
+from observational_memory.slugs import cc_slug, memory_slug
 
 
 def test_cc_slug_basic():

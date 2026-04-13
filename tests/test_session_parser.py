@@ -1,5 +1,5 @@
 import os
-from observer.session_parser import parse_session
+from observational_memory.session_parser import parse_session
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "sample_session.jsonl")
 
