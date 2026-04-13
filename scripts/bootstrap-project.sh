@@ -1,6 +1,7 @@
 #!/bin/bash
 # bootstrap-project.sh — Creates a CLAUDE.md for a new project pointing to the observational memory system.
 # Usage: Run from the root of a project directory.
+# Requires: pip install observational-memory
 
 set -e
 
@@ -14,11 +15,12 @@ cat > CLAUDE.md << 'CLAUDE_EOF'
 
 ## Observational Memory
 
-This project uses Jeremy's observational memory system. Load the skill file to get behavioral context:
+This project uses observational memory. Load the behavioral context before starting work:
 
-Skill: `~/Projects/jg-observational-memory/skills/jg-context.md`
-
-Follow the instructions in the skill to load global and project-specific rules before starting work.
+1. Read `~/.observational-memory/memory/global.md` for global behavioral rules.
+2. Derive the project slug from this directory's basename (lowercase, special chars → `-`).
+3. If `~/.observational-memory/memory/projects/{slug}.md` exists, read it too.
+4. Treat both as firm behavioral rules — project overrides global on conflict.
 CLAUDE_EOF
 
 echo "Created CLAUDE.md with observational memory reference."
