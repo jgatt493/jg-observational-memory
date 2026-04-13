@@ -166,6 +166,62 @@ def do_reflect(slug: str | None = None, reflect_all: bool = False):
         sys.exit(1)
 
 
+def do_migrate_from_postgres(host: str, port: str, dbname: str, user: str, password: str):
+    """One-time migration from existing Postgres database."""
+    try:
+        import psycopg2
+    except ImportError:
+        print("  psycopg2 is required for migration. Install it:")
+        print("    pip install psycopg2-binary")
+        sys.exit(1)
+
+    from observational_memory.db import get_connection, init_db
+    init_db()
+
+    pg = psycopg2.connect(host=host, port=port, dbname=dbname, user=user, password=password)
+    sqlite = get_connection()
+
+    tables = {
+        "observations": "INSERT INTO observations (ts, session_id, project, scope, type, content) VALUES (?, ?, ?, ?, ?, ?)",
+        "interaction_styles": "INSERT INTO interaction_styles (ts, session_id, project, domain, expert, inquisitive, architectural, precise, scope_aware, risk_conscious, ai_led) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "observed_sessions": "INSERT OR IGNORE INTO observed_sessions (session_id, project, ts, had_observations) VALUES (?, ?, ?, ?)",
+        "reflections": "INSERT OR REPLACE INTO reflections (slug, prose, char_count, observation_count, ts) VALUES (?, ?, ?, ?, ?)",
+    }
+
+    for table, insert_sql in tables.items():
+        cur = pg.cursor()
+        cur.execute(f"SELECT * FROM {table}")
+        cols = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+        cur.close()
+
+        # Map column values to the insert order
+        for row in rows:
+            row_dict = dict(zip(cols, row))
+            if table == "observations":
+                vals = (str(row_dict["ts"]), row_dict["session_id"], row_dict["project"],
+                        row_dict["scope"], row_dict["type"], row_dict["content"])
+            elif table == "interaction_styles":
+                vals = (str(row_dict["ts"]), row_dict["session_id"], row_dict["project"],
+                        row_dict["domain"], row_dict["expert"], row_dict["inquisitive"],
+                        row_dict["architectural"], row_dict["precise"], row_dict["scope_aware"],
+                        row_dict["risk_conscious"], row_dict["ai_led"])
+            elif table == "observed_sessions":
+                vals = (row_dict["session_id"], row_dict["project"], str(row_dict["ts"]),
+                        int(row_dict.get("had_observations", False)))
+            elif table == "reflections":
+                vals = (row_dict["slug"], row_dict["prose"], row_dict.get("char_count", 0),
+                        row_dict.get("observation_count", 0), str(row_dict["ts"]))
+            sqlite.execute(insert_sql, vals)
+
+        sqlite.commit()
+        print(f"  ✓ {table}: {len(rows)} rows migrated")
+
+    pg.close()
+    sqlite.close()
+    print("\n  Migration complete!")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="observational-memory",
@@ -183,6 +239,13 @@ def main():
     reflect_parser.add_argument("slug", nargs="?", help="Project slug to reflect")
     reflect_parser.add_argument("--all", action="store_true", help="Reflect all projects + global")
 
+    migrate_parser = subparsers.add_parser("migrate-from-postgres", help="Migrate data from Postgres")
+    migrate_parser.add_argument("--host", default="localhost")
+    migrate_parser.add_argument("--port", default="5433")
+    migrate_parser.add_argument("--dbname", default="om_memory")
+    migrate_parser.add_argument("--user", default="jg")
+    migrate_parser.add_argument("--password", default="REDACTED")
+
     args = parser.parse_args()
 
     if args.command == "install":
@@ -193,6 +256,8 @@ def main():
         do_backfill()
     elif args.command == "reflect":
         do_reflect(slug=args.slug, reflect_all=args.all)
+    elif args.command == "migrate-from-postgres":
+        do_migrate_from_postgres(args.host, args.port, args.dbname, args.user, args.password)
     else:
         parser.print_help()
         sys.exit(1)
