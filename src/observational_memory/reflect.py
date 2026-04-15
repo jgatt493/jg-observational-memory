@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 import anthropic
 
+from observational_memory.api_key import resolve_api_key
 from observational_memory.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT
 from observational_memory.db import (
     get_observations_for_project,
@@ -52,20 +53,47 @@ def compress_prose(prose: str) -> str:
     return response.content[0].text
 
 
-def synthesize(existing_prose: str, entries: list[dict]) -> str:
-    """Call Haiku to synthesize observations into dense prose."""
+def parse_tiered_output(text: str) -> tuple[str, str | None]:
+    """Parse reflector output into core and contextual sections.
+
+    Returns (core_prose, context_prose_or_None).
+    Fallback: if delimiters not found, treat entire response as core.
+    """
+    core_marker = "===CORE==="
+    ctx_marker = "===CONTEXTUAL==="
+
+    if core_marker not in text:
+        log_error("Reflector output missing ===CORE=== delimiter, treating as core")
+        return text.strip(), None
+
+    if ctx_marker in text:
+        parts = text.split(ctx_marker, 1)
+        core = parts[0].replace(core_marker, "").strip()
+        context = parts[1].strip()
+        return core, context if context else None
+    else:
+        core = text.replace(core_marker, "").strip()
+        return core, None
+
+
+def synthesize(existing_core_prose: str, existing_context_prose: str, entries: list[dict]) -> str:
+    """Call Haiku to synthesize observations into tiered prose."""
     observations_text = "\n".join(
-        f"{'[CORRECTION] ' if e.get('type') == 'correction' else ''}{e.get('content', '')}"
+        f"[{e.get('durability', 'unknown')}] "
+        f"{'[CORRECTION] ' if e.get('type') == 'correction' else ''}"
+        f"{e.get('content', '')} "
+        f"(trigger: {e.get('trigger_summary', 'unknown')})"
         for e in entries
     )
     client = anthropic.Anthropic()
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2048,
+        max_tokens=8192,
         system=REFLECTOR_SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": REFLECTOR_USER_PROMPT.format(
-                existing_prose=existing_prose or "(no existing rules)",
+                existing_core_prose=existing_core_prose or "(no existing rules)",
+                existing_context_prose=existing_context_prose or "(no existing context)",
                 observations=observations_text,
             )}
         ],
@@ -102,29 +130,46 @@ def reflect_slug(slug: str, entries: list[dict], md_path: str | None = None):
         else:
             md_path = os.path.join(MEMORY_ROOT, "projects", f"{slug}.md")
 
-    existing_prose = read_synthesized_prose(md_path)
-    new_prose = synthesize(existing_prose, entries)
+    base, ext = os.path.splitext(md_path)
+    context_path = f"{base}_context{ext}"
 
-    if not validate_token_length(new_prose):
-        log_error(f"Synthesis for {slug} exceeded {MAX_CHARS} chars ({len(new_prose)}), retrying with compression")
-        new_prose = compress_prose(new_prose)
-        if not validate_token_length(new_prose):
-            log_error(f"Synthesis for {slug} still exceeds limit after retry ({len(new_prose)}), writing anyway")
+    existing_core = read_synthesized_prose(md_path)
+    existing_context = read_synthesized_prose(context_path)
 
+    raw_output = synthesize(existing_core, existing_context, entries)
+    core_prose, context_prose = parse_tiered_output(raw_output)
+
+    # Validate and compress core section only
+    if not validate_token_length(core_prose):
+        log_error(f"Core for {slug} exceeded {MAX_CHARS} chars ({len(core_prose)}), compressing")
+        core_prose = compress_prose(core_prose)
+        if not validate_token_length(core_prose):
+            log_error(f"Core for {slug} still exceeds limit after compression ({len(core_prose)}), writing anyway")
+
+    # Write core file
     os.makedirs(os.path.dirname(md_path), exist_ok=True)
     with open(md_path, "w") as f:
-        f.write(new_prose)
+        f.write(core_prose)
+
+    # Write context file (only if non-empty), remove stale context file if no contextual section
+    if context_prose:
+        with open(context_path, "w") as f:
+            f.write(context_prose)
+    elif os.path.exists(context_path):
+        os.remove(context_path)
 
     try:
         max_id = get_max_observation_id(slug)
-        upsert_reflection(slug, new_prose, len(entries), max_id)
+        upsert_reflection(slug, core_prose, len(entries), max_id, context_prose=context_prose)
     except Exception as e:
         log_error(f"Failed to upsert reflection for {slug}: {e}")
 
-    print(f"  {slug}: {len(entries)} observations -> {len(new_prose)} chars")
+    print(f"  {slug}: {len(entries)} observations -> {len(core_prose)} chars core" +
+          (f", {len(context_prose)} chars context" if context_prose else ""))
 
 
 def main():
+    resolve_api_key()
     reflect_all = "--all" in sys.argv
     slug = None
     for arg in sys.argv[1:]:

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 import anthropic
 
+from observational_memory.api_key import resolve_api_key
 from observational_memory.slugs import cc_slug, memory_slug
 from observational_memory.session_parser import parse_session
 from observational_memory.prompts import OBSERVER_SYSTEM_PROMPT, OBSERVER_USER_PROMPT
@@ -147,13 +148,22 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
     else:
         return [], None
 
-    observations = [
-        obs for obs in raw_obs
-        if isinstance(obs, dict)
-        and obs.get("scope") in ("global", "project")
-        and obs.get("type") in ("preference", "correction", "pattern", "decision")
-        and obs.get("content")
-    ]
+    observations = []
+    for obs in raw_obs:
+        if (isinstance(obs, dict)
+            and obs.get("scope") in ("global", "project")
+            and obs.get("type") in ("preference", "correction", "pattern", "decision")
+            and obs.get("content")):
+            cleaned = {
+                "scope": obs["scope"],
+                "type": obs["type"],
+                "content": obs["content"],
+            }
+            if obs.get("durability") in ("durable", "contextual", "incident"):
+                cleaned["durability"] = obs["durability"]
+            if obs.get("trigger"):
+                cleaned["trigger"] = obs["trigger"]
+            observations.append(cleaned)
     return observations, interaction_style
 
 
@@ -204,13 +214,14 @@ def find_all_cc_sessions() -> list[tuple[str, str]]:
 
 
 def main():
+    resolve_api_key()
     try:
         payload = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, Exception) as e:
         log_error(f"Failed to read stdin payload: {e}")
         sys.exit(0)
 
-    session_id = payload.get("sessionId", "")
+    session_id = payload.get("session_id", "") or payload.get("sessionId", "")
     cwd = payload.get("cwd", "")
     if not session_id or not cwd:
         log_error(f"Missing sessionId or cwd in payload: {payload}")

@@ -28,11 +28,12 @@ def do_install(config_root: str | None = None):
         print()
         print('    export ANTHROPIC_API_KEY="sk-ant-..."')
         print()
-        print("  If your key is managed elsewhere (keychain, direnv, etc.), re-run with:")
-        print("    observational-memory install --no-key-check")
+        print("  Alternatives:")
+        print("    • Put key in a file:  echo 'sk-ant-...' > ~/.observational-memory/.api-key")
+        print("    • Or set a custom path: export ANTHROPIC_API_KEY_FILE=/path/to/key")
+        print("    • Skip this check:   observational-memory install --no-key-check")
         print()
-        print("  Just make sure ANTHROPIC_API_KEY is available to non-interactive shells")
-        print("  when the Stop hook fires.")
+        print("  The key must be available to non-interactive shells when the Stop hook fires.")
         sys.exit(1)
 
     # Init DB
