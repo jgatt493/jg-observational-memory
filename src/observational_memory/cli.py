@@ -17,8 +17,8 @@ def do_install(config_root: str | None = None):
     memory_dir = os.path.join(om_dir, "memory", "projects")
     os.makedirs(memory_dir, exist_ok=True)
 
-    # Check for API key — hard requirement
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    # Check for API key — hard requirement (skip with --no-key-check)
+    if "--no-key-check" not in sys.argv and not os.environ.get("ANTHROPIC_API_KEY"):
         print("  ✗ ANTHROPIC_API_KEY is not set.")
         print()
         print("  The observer calls Claude Haiku to extract observations from sessions.")
@@ -28,7 +28,11 @@ def do_install(config_root: str | None = None):
         print()
         print('    export ANTHROPIC_API_KEY="sk-ant-..."')
         print()
-        print("  Then re-run: observational-memory install")
+        print("  If your key is managed elsewhere (keychain, direnv, etc.), re-run with:")
+        print("    observational-memory install --no-key-check")
+        print()
+        print("  Just make sure ANTHROPIC_API_KEY is available to non-interactive shells")
+        print("  when the Stop hook fires.")
         sys.exit(1)
 
     # Init DB
