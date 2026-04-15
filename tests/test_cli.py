@@ -1,8 +1,29 @@
 import json
 import os
+import pytest
 from unittest.mock import patch
 
 from observational_memory.cli import do_install, do_uninstall
+
+
+@pytest.fixture(autouse=True)
+def fake_api_key():
+    """Set a fake API key for all install tests."""
+    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test-fake-key"}):
+        yield
+
+
+def test_install_fails_without_api_key(tmp_path):
+    """Install must hard-fail when ANTHROPIC_API_KEY is not set."""
+    config_root = str(tmp_path)
+    with patch.dict(os.environ, {}, clear=True), \
+         patch("observational_memory.cli.DB_PATH", str(tmp_path / "memory.db")), \
+         patch("observational_memory.cli.init_db"):
+        # Remove the key explicitly
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        with pytest.raises(SystemExit) as exc_info:
+            do_install(config_root=config_root)
+        assert exc_info.value.code == 1
 
 
 def test_install_creates_dirs(tmp_path):

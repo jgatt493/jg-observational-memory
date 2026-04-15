@@ -17,10 +17,19 @@ def do_install(config_root: str | None = None):
     memory_dir = os.path.join(om_dir, "memory", "projects")
     os.makedirs(memory_dir, exist_ok=True)
 
-    # Check for API key
+    # Check for API key — hard requirement
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  ⚠ ANTHROPIC_API_KEY not set. The observer needs it to call Claude Haiku.")
-        print("    Set it in your shell profile before using.")
+        print("  ✗ ANTHROPIC_API_KEY is not set.")
+        print()
+        print("  The observer calls Claude Haiku to extract observations from sessions.")
+        print("  Without this key, the hook will silently fail on every session.")
+        print()
+        print("  Fix: Add to ~/.zshenv (sourced by all shells including hook subprocesses):")
+        print()
+        print('    export ANTHROPIC_API_KEY="sk-ant-..."')
+        print()
+        print("  Then re-run: observational-memory install")
+        sys.exit(1)
 
     # Init DB
     init_db()
