@@ -236,6 +236,50 @@ def do_migrate_from_postgres(host: str, port: str, dbname: str, user: str, passw
     print("\n  Migration complete!")
 
 
+def do_observe_messages(project: str, session_id: str | None = None):
+    """Observe messages from stdin. Accepts JSON array of {role, content} objects."""
+    import uuid
+    from observational_memory.api_key import resolve_api_key
+    from observational_memory.observe import extract_observations, maybe_trigger_reflection, log_error
+    from observational_memory.db import insert_observations, insert_interaction_style, mark_session_observed
+
+    resolve_api_key()
+
+    try:
+        raw = sys.stdin.read()
+        messages = json.loads(raw)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"  ✗ Failed to parse stdin as JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not isinstance(messages, list) or not messages:
+        print("  ✗ Expected a non-empty JSON array of messages", file=sys.stderr)
+        sys.exit(1)
+
+    sid = session_id or str(uuid.uuid4())
+
+    try:
+        observations, interaction_style = extract_observations(messages, project)
+    except Exception as e:
+        log_error(f"observe-messages failed for {project}: {e}")
+        print(f"  ✗ Observation extraction failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    has_obs = bool(observations) or bool(interaction_style)
+
+    if observations:
+        insert_observations(observations, sid, project)
+    if interaction_style and isinstance(interaction_style, dict):
+        insert_interaction_style(interaction_style, sid, project)
+    mark_session_observed(sid, project, has_obs)
+
+    print(f"  {project}: {len(observations)} observations extracted (session {sid[:8]}...)")
+
+    if has_obs:
+        maybe_trigger_reflection(project)
+        maybe_trigger_reflection("global")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="observational-memory",
@@ -248,6 +292,10 @@ def main():
     subparsers.add_parser("install", help="Set up observational memory")
     subparsers.add_parser("uninstall", help="Remove the Claude Code hook")
     subparsers.add_parser("backfill", help="Process all past Claude Code sessions")
+
+    observe_parser = subparsers.add_parser("observe-messages", help="Observe messages from stdin (pipe JSON array)")
+    observe_parser.add_argument("project", help="Project slug for these observations")
+    observe_parser.add_argument("--session-id", help="Session ID (auto-generated if omitted)")
 
     reflect_parser = subparsers.add_parser("reflect", help="Synthesize observations into prose")
     reflect_parser.add_argument("slug", nargs="?", help="Project slug to reflect")
@@ -268,6 +316,8 @@ def main():
         do_uninstall()
     elif args.command == "backfill":
         do_backfill()
+    elif args.command == "observe-messages":
+        do_observe_messages(project=args.project, session_id=args.session_id)
     elif args.command == "reflect":
         do_reflect(slug=args.slug, reflect_all=args.all)
     elif args.command == "migrate-from-postgres":

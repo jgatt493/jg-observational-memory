@@ -1,7 +1,7 @@
 import json
 import os
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from observational_memory.cli import do_install, do_uninstall
 
@@ -94,3 +94,50 @@ def test_uninstall_removes_hook(tmp_path):
     settings = json.loads(settings_path.read_text())
     assert len(settings["hooks"]["Stop"]) == 1
     assert "observational_memory" not in settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+
+
+def test_observe_messages_extracts_and_stores(tmp_path):
+    """observe-messages should extract observations from piped JSON and store them."""
+    from observational_memory.cli import do_observe_messages
+
+    messages = json.dumps([
+        {"role": "user", "content": "Always use feature branches, never commit to main"},
+        {"role": "assistant", "content": "Got it, feature branches only."},
+    ])
+
+    mock_obs = [{"scope": "global", "type": "preference", "content": "feature branches only",
+                 "durability": "durable", "trigger": "explicitly stated"}]
+    mock_style = {"domain": "git", "expert": 0.8, "inquisitive": 0.1, "architectural": 0.3,
+                  "precise": 0.7, "scope_aware": 0.5, "risk_conscious": 0.2, "ai_led": 0.1}
+
+    db_path = str(tmp_path / "test.db")
+    with patch("sys.stdin", MagicMock(read=MagicMock(return_value=messages))), \
+         patch("observational_memory.observe.extract_observations", return_value=(mock_obs, mock_style)), \
+         patch("observational_memory.db.insert_observations") as mock_insert, \
+         patch("observational_memory.db.insert_interaction_style") as mock_style_insert, \
+         patch("observational_memory.db.mark_session_observed"), \
+         patch("observational_memory.observe.maybe_trigger_reflection"):
+        do_observe_messages(project="test-project", session_id="test-session-1")
+
+    mock_insert.assert_called_once()
+    assert mock_insert.call_args[0][0] == mock_obs
+    assert mock_insert.call_args[0][2] == "test-project"
+    mock_style_insert.assert_called_once()
+
+
+def test_observe_messages_rejects_empty_input():
+    from observational_memory.cli import do_observe_messages
+
+    with patch("sys.stdin", MagicMock(read=MagicMock(return_value="[]"))):
+        with pytest.raises(SystemExit) as exc_info:
+            do_observe_messages(project="test")
+        assert exc_info.value.code == 1
+
+
+def test_observe_messages_rejects_bad_json():
+    from observational_memory.cli import do_observe_messages
+
+    with patch("sys.stdin", MagicMock(read=MagicMock(return_value="not json"))):
+        with pytest.raises(SystemExit) as exc_info:
+            do_observe_messages(project="test")
+        assert exc_info.value.code == 1
