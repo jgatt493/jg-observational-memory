@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS observations (
     project TEXT NOT NULL,
     scope TEXT NOT NULL CHECK (scope IN ('global', 'project')),
     type TEXT NOT NULL CHECK (type IN ('preference', 'correction', 'pattern', 'decision')),
-    content TEXT NOT NULL
+    content TEXT NOT NULL,
+    durability TEXT CHECK (durability IN ('durable', 'contextual', 'incident')),
+    trigger_summary TEXT
 );
 
 CREATE TABLE IF NOT EXISTS interaction_styles (
@@ -47,7 +49,8 @@ CREATE TABLE IF NOT EXISTS reflections (
     char_count INTEGER NOT NULL DEFAULT 0,
     observation_count INTEGER NOT NULL DEFAULT 0,
     last_observation_id INTEGER NOT NULL DEFAULT 0,
-    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    context_prose TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_observations_project ON observations(project);
@@ -58,6 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_styles_project ON interaction_styles(project);
 CREATE INDEX IF NOT EXISTS idx_styles_domain ON interaction_styles(domain);
 CREATE INDEX IF NOT EXISTS idx_styles_session ON interaction_styles(session_id);
 CREATE INDEX IF NOT EXISTS idx_observed_sessions_project ON observed_sessions(project);
+CREATE INDEX IF NOT EXISTS idx_observations_durability ON observations(durability);
 """
 
 
@@ -89,9 +93,10 @@ def insert_observations(observations: list[dict], session_id: str, project: str)
         ts = datetime.now(timezone.utc).isoformat()
         for obs in observations:
             conn.execute(
-                """INSERT INTO observations (ts, session_id, project, scope, type, content)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (ts, session_id, project, obs["scope"], obs["type"], obs["content"]),
+                """INSERT INTO observations (ts, session_id, project, scope, type, content, durability, trigger_summary)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ts, session_id, project, obs["scope"], obs["type"], obs["content"],
+                 obs.get("durability"), obs.get("trigger")),
             )
         conn.commit()
     finally:
@@ -161,10 +166,10 @@ def get_observations_for_project(project: str) -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT scope, type, content FROM observations WHERE project = ? ORDER BY ts",
+            "SELECT scope, type, content, durability, trigger_summary FROM observations WHERE project = ? ORDER BY ts",
             (project,),
         ).fetchall()
-        return [{"scope": r[0], "type": r[1], "content": r[2]} for r in rows]
+        return [{"scope": r[0], "type": r[1], "content": r[2], "durability": r[3], "trigger_summary": r[4]} for r in rows]
     finally:
         conn.close()
 
@@ -174,9 +179,9 @@ def get_global_observations() -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT scope, type, content FROM observations WHERE scope = 'global' ORDER BY ts",
+            "SELECT scope, type, content, durability, trigger_summary FROM observations WHERE scope = 'global' ORDER BY ts",
         ).fetchall()
-        return [{"scope": r[0], "type": r[1], "content": r[2]} for r in rows]
+        return [{"scope": r[0], "type": r[1], "content": r[2], "durability": r[3], "trigger_summary": r[4]} for r in rows]
     finally:
         conn.close()
 
@@ -193,22 +198,35 @@ def get_all_projects() -> list[str]:
         conn.close()
 
 
-def upsert_reflection(slug: str, prose: str, observation_count: int, last_observation_id: int):
+def upsert_reflection(slug: str, prose: str, observation_count: int, last_observation_id: int, context_prose: str | None = None):
     """Store or update the synthesized prose for a project/global slug."""
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT INTO reflections (slug, prose, char_count, observation_count, last_observation_id, ts)
-               VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO reflections (slug, prose, char_count, observation_count, last_observation_id, ts, context_prose)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (slug) DO UPDATE SET
                  prose = EXCLUDED.prose,
                  char_count = EXCLUDED.char_count,
                  observation_count = EXCLUDED.observation_count,
                  last_observation_id = EXCLUDED.last_observation_id,
-                 ts = EXCLUDED.ts""",
-            (slug, prose, len(prose), observation_count, last_observation_id, datetime.now(timezone.utc).isoformat()),
+                 ts = EXCLUDED.ts,
+                 context_prose = EXCLUDED.context_prose""",
+            (slug, prose, len(prose), observation_count, last_observation_id, datetime.now(timezone.utc).isoformat(), context_prose),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def has_reflection(slug: str) -> bool:
+    """Check if a reflection exists for a slug."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM reflections WHERE slug = ? LIMIT 1", (slug,)
+        ).fetchone()
+        return row is not None
     finally:
         conn.close()
 

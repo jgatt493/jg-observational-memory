@@ -21,11 +21,13 @@ from observational_memory.db import (
     get_observations_for_project,
     get_global_observations,
     get_unprocessed_count,
+    has_reflection,
 )
 
 MEMORY_ROOT = os.path.expanduser("~/.observational-memory/memory")
 ERROR_LOG = os.path.expanduser("~/.observational-memory/errors.log")
-REFLECTION_THRESHOLD = 100
+REFLECTION_THRESHOLD = 50
+FIRST_REFLECTION_THRESHOLD = 10
 MODEL = "claude-haiku-4-5-20251001"
 
 
@@ -65,7 +67,8 @@ def strip_code_fences(text: str) -> str:
 def maybe_trigger_reflection(slug: str):
     """Spawn the reflector if unprocessed observation count exceeds the threshold."""
     count = get_unprocessed_count(slug)
-    if count > REFLECTION_THRESHOLD:
+    threshold = FIRST_REFLECTION_THRESHOLD if not has_reflection(slug) else REFLECTION_THRESHOLD
+    if count >= threshold:
         subprocess.Popen(
             [sys.executable, "-m", "observational_memory.reflect", slug],
             stdout=subprocess.DEVNULL,
