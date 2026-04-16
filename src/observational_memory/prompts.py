@@ -47,13 +47,33 @@ Score the user's interaction style on 7 axes from 0.0 to 1.0:
 
 Also infer a short "domain" label for what the conversation is primarily about (e.g., "frontend", "rust/networking", "infrastructure", "data-pipeline", "devtools", "design").
 
+## Durability Classification
+
+For each observation, classify its durability:
+- "durable": A stable preference or rule that would apply in any future session. The user explicitly stated it as a general rule, or it's a pattern clearly not tied to a specific event.
+  Example: "User explicitly states 'always use feature branches'" → durable, trigger: "explicitly stated rule"
+- "contextual": Tied to how the user works in this specific project or phase. May evolve as the project changes.
+  Example: "User prefers script-based infra in this project" → contextual, trigger: "rejected HTTP service proposal for data pipeline"
+- "incident": A reaction to a specific event, bug, or frustration. May not recur once the root cause is resolved.
+  Example: "User frustrated by CC session timeouts" → incident, trigger: "npm version bug causing repeated CC crashes"
+
+The "trigger" field is a short description of what caused the observation. Be specific — name the event, bug, tool, or conversation moment.
+
+Note: You only see one session. If you're unsure whether something is durable or incident, lean toward the more specific classification (contextual or incident). The reflector will promote it later if it keeps appearing.
+
 ## Output Format
 
 Return a JSON object with two keys:
 
 {
   "observations": [
-    {"scope": "global|project", "type": "preference|correction|pattern|decision", "content": "concise description"}
+    {
+      "scope": "global|project",
+      "type": "preference|correction|pattern|decision",
+      "content": "concise description",
+      "durability": "durable|contextual|incident",
+      "trigger": "what caused this observation"
+    }
   ],
   "interaction_style": {
     "expert": 0.0-1.0,
@@ -88,39 +108,54 @@ Project: {project}
 
 {conversation}"""
 
-REFLECTOR_SYSTEM_PROMPT = """You are a memory synthesis agent. You take raw observations about a user and synthesize them into a dense behavioral profile — rules for how an AI agent should work with this user.
+REFLECTOR_SYSTEM_PROMPT = """You are a memory synthesis agent. You take raw observations about a user and synthesize them into a tiered behavioral profile.
 
-This profile is ABOUT THE USER, not about their projects. It describes how they work, what they value, how they communicate, and what they expect from AI assistants.
+You produce TWO sections:
+
+===CORE===
+Dense behavioral rules — firm instructions for how an AI agent should work with this user. Only durable, reinforced preferences belong here. Max 8000 characters.
+
+===CONTEXTUAL===
+Annotations with provenance — incident reactions, project-specific patterns, and evolving preferences. Each entry prefixed with [durability:trigger] (e.g., [incident:npm-timeout-bug], [contextual:data-platform-phase]).
 
 Rules:
-1. Output must not exceed 8000 characters (~2000 tokens).
-2. Use flat prose with topic-prefix labels. No headers, no bullet lists.
-3. Maximize information density — every word should carry meaning.
-4. Entries marked [CORRECTION] are firm rules, not soft preferences. The user had to explicitly correct an agent. These MUST appear in the output.
-5. If you receive existing prose, integrate the new observations into it. Do not simply append — rewrite the whole document to be coherent.
+1. Output MUST contain ===CORE=== on its own line. ===CONTEXTUAL=== is optional (omit if nothing contextual).
+2. Core section: max 8000 characters. Use flat prose with topic-prefix labels. No headers, no bullet lists. Maximize density.
+3. Contextual section: uncapped but naturally dense. Each entry on its own line with [durability:trigger] prefix.
+4. Entries marked [CORRECTION] are firm rules. They MUST appear in the core section.
+5. If you receive existing core and contextual prose, integrate new observations. Rewrite coherently — don't append.
 6. Merge duplicate or related observations.
-7. Drop observations that are trivial, one-off, or about project specifics (architecture, tech stack, APIs). Only keep observations about the USER's behavior, preferences, and working style.
-8. For interaction_style entries: average scores per domain across sessions. Only include axes scoring >= 0.5 average for a domain. Format as: interaction-style: domain(axis1, axis2) — brief description.
+7. Drop trivial or project-specific technical facts. Only keep observations about the USER's behavior.
+8. For interaction_style entries: average scores per domain. Only include axes >= 0.5. Format: interaction-style: domain(axis1, axis2).
 
-Example output format:
-testing: backend(python,rust) always requires test cases. frontend: no unit tests; e2e playwright only when explicitly asked. treats tests as immutable specification — never modify test files.
+Promotion/Demotion:
+- If an incident-tagged observation has been reinforced by multiple new observations, extract the UNDERLYING PRINCIPLE and promote it to core. Example: repeated frustration with a specific bug → core rule "user doesn't want workarounds that ignore obvious root causes."
+- If a core entry appears on re-evaluation to be incident-specific (tied to one event, not reinforced), demote it to contextual.
+- Drop stale incident entries that have not been reinforced by newer observations.
 
-git: always feature branches. never commit to main. never reuse a merged branch.
+Example core format:
+git: always feature branches. never commit to main. never reuse merged branches.
 
-communication: [CORRECTION] dislikes idle periods — demands real-time updates. escalating language ("immediately", "HAVE to") signals critical severity. prefers direct action over exploration.
+Example contextual format:
+[incident:npm-version-bug] User escalated about CC session crashes — 5 observations from 2 sessions. Underlying preference (promoted to core): rejects workarounds for systemic issues.
+[contextual:data-platform] Prefers script-based infra over HTTP services in this project — rejected API proposal."""
 
-interaction-style: frontend(expert, precise, scope-aware) — gives exact instructions, actively prunes scope creep. rust/networking(inquisitive, ai-led, architectural) — learning the domain but thinks in systems."""
+REFLECTOR_USER_PROMPT = """Here are the current synthesized core rules (may be empty if first reflection):
 
-REFLECTOR_USER_PROMPT = """Here are the current synthesized rules (may be empty if first reflection):
-
-{existing_prose}
+{existing_core_prose}
 
 ---
 
-Here are new observations to integrate:
+Here is the current contextual prose (may be empty):
+
+{existing_context_prose}
+
+---
+
+Here are observations to integrate (with durability and trigger metadata):
 
 {observations}
 
 ---
 
-Produce the updated dense prose. Remember: max 8000 characters, flat prose with topic prefixes, [CORRECTION] entries are firm rules."""
+Produce the updated output with ===CORE=== and ===CONTEXTUAL=== sections. Core section max 8000 characters. [CORRECTION] entries are firm rules that must appear in core."""

@@ -135,3 +135,46 @@ def test_get_unprocessed_count_global(tmp_db):
         {"scope": "project", "type": "preference", "content": "project-only"},
     ], "s1", "someproj")
     assert get_unprocessed_count("global") == 2
+
+
+def test_insert_observations_with_durability(tmp_db):
+    obs = [
+        {"scope": "global", "type": "correction", "content": "always feature branches",
+         "durability": "durable", "trigger": "explicitly stated rule"},
+    ]
+    insert_observations(obs, "session-1", "myproj")
+    result = get_observations_for_project("myproj")
+    assert result[0]["durability"] == "durable"
+    assert result[0]["trigger_summary"] == "explicitly stated rule"
+
+
+def test_insert_observations_without_durability(tmp_db):
+    obs = [{"scope": "global", "type": "preference", "content": "likes tests"}]
+    insert_observations(obs, "session-1", "myproj")
+    result = get_observations_for_project("myproj")
+    assert result[0]["durability"] is None
+    assert result[0]["trigger_summary"] is None
+
+
+def test_insert_observations_rejects_invalid_durability(tmp_db):
+    obs = [{"scope": "global", "type": "preference", "content": "test",
+            "durability": "bogus", "trigger": "test"}]
+    with pytest.raises(sqlite3.IntegrityError):
+        insert_observations(obs, "session-1", "myproj")
+
+
+def test_upsert_reflection_with_context_prose(tmp_db):
+    upsert_reflection("myproj", "core rules", 5, 42, context_prose="[incident:bug] details")
+    conn = sqlite3.connect(tmp_db)
+    row = conn.execute("SELECT prose, context_prose FROM reflections WHERE slug = ?", ("myproj",)).fetchone()
+    conn.close()
+    assert row[0] == "core rules"
+    assert row[1] == "[incident:bug] details"
+
+
+def test_upsert_reflection_without_context_prose(tmp_db):
+    upsert_reflection("myproj", "core rules", 5, 42)
+    conn = sqlite3.connect(tmp_db)
+    row = conn.execute("SELECT context_prose FROM reflections WHERE slug = ?", ("myproj",)).fetchone()
+    conn.close()
+    assert row[0] is None
