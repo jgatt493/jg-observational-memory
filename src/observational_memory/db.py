@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS observed_sessions (
     session_id TEXT PRIMARY KEY,
     project TEXT NOT NULL,
     ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    had_observations INTEGER NOT NULL DEFAULT 0
+    had_observations INTEGER NOT NULL DEFAULT 0,
+    last_line INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS reflections (
@@ -72,6 +73,11 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.executescript(SCHEMA)
     conn.execute("PRAGMA journal_mode=WAL")
+    # Migrate: add last_line column if missing (existing DBs from before checkpointing)
+    try:
+        conn.execute("ALTER TABLE observed_sessions ADD COLUMN last_line INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     conn.close()
 
@@ -134,17 +140,34 @@ def insert_interaction_style(style: dict, session_id: str, project: str):
         conn.close()
 
 
-def mark_session_observed(session_id: str, project: str, had_observations: bool):
-    """Record that a session has been processed."""
+def mark_session_observed(session_id: str, project: str, had_observations: bool, last_line: int = 0):
+    """Record that a session has been processed, with line checkpoint."""
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT INTO observed_sessions (session_id, project, ts, had_observations)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT (session_id) DO NOTHING""",
-            (session_id, project, datetime.now(timezone.utc).isoformat(), int(had_observations)),
+            """INSERT INTO observed_sessions (session_id, project, ts, had_observations, last_line)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (session_id) DO UPDATE SET
+                 ts = EXCLUDED.ts,
+                 had_observations = CASE WHEN EXCLUDED.had_observations > observed_sessions.had_observations
+                                        THEN EXCLUDED.had_observations ELSE observed_sessions.had_observations END,
+                 last_line = EXCLUDED.last_line""",
+            (session_id, project, datetime.now(timezone.utc).isoformat(), int(had_observations), last_line),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def get_session_last_line(session_id: str) -> int:
+    """Get the last observed line number for a session. Returns 0 if never observed."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT last_line FROM observed_sessions WHERE session_id = ? LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return row[0] if row else 0
     finally:
         conn.close()
 

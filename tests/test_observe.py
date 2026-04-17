@@ -45,7 +45,7 @@ def test_main_reads_snake_case_session_id():
         "cwd": "/Users/test/Projects/myapp",
     })
     with patch("sys.stdin", MagicMock(read=MagicMock(return_value=payload))), \
-         patch("observational_memory.observe.is_session_observed", return_value=True), \
+         patch("observational_memory.observe.process_session", return_value=None), \
          patch("observational_memory.observe.find_all_cc_sessions", return_value=[]), \
          patch("observational_memory.observe.log_error") as mock_log:
         from observational_memory.observe import main
@@ -62,7 +62,7 @@ def test_main_reads_camel_case_session_id():
         "cwd": "/Users/test/Projects/myapp",
     })
     with patch("sys.stdin", MagicMock(read=MagicMock(return_value=payload))), \
-         patch("observational_memory.observe.is_session_observed", return_value=True), \
+         patch("observational_memory.observe.process_session", return_value=None), \
          patch("observational_memory.observe.find_all_cc_sessions", return_value=[]), \
          patch("observational_memory.observe.log_error") as mock_log:
         from observational_memory.observe import main

@@ -31,12 +31,24 @@ def extract_text_content(content) -> str:
     return ""
 
 
-def parse_session(path: str) -> list[dict]:
-    """Parse a CC session JSONL file and return user + assistant messages in order."""
+def parse_session(path: str, start_line: int = 0) -> tuple[list[dict], int]:
+    """Parse a CC session JSONL file and return user + assistant messages in order.
+
+    Args:
+        path: Path to the session JSONL file.
+        start_line: Line number to start parsing from (0-based). Skips lines before this.
+
+    Returns:
+        (messages, total_lines) — messages extracted and total line count of the file.
+    """
     messages = []
+    total_lines = 0
     try:
         with open(path) as f:
-            for line in f:
+            for i, line in enumerate(f):
+                total_lines = i + 1
+                if i < start_line:
+                    continue
                 line = line.strip()
                 if not line:
                     continue
@@ -50,5 +62,5 @@ def parse_session(path: str) -> list[dict]:
                 if role and content.strip():
                     messages.append({"role": role, "content": content})
     except (FileNotFoundError, json.JSONDecodeError):
-        return []
-    return messages
+        return [], 0
+    return messages, total_lines

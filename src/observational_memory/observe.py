@@ -19,6 +19,7 @@ from observational_memory.db import (
     insert_interaction_style,
     is_session_observed,
     mark_session_observed,
+    get_session_last_line,
     get_observations_for_project,
     get_global_observations,
     get_unprocessed_count,
@@ -165,8 +166,12 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
 def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
     """Process a single session transcript. Returns the memory slug if observations were written."""
     slug = memory_slug(cwd)
-    messages = parse_session(session_path)
+    start_line = get_session_last_line(session_id)
+    messages, total_lines = parse_session(session_path, start_line=start_line)
     if not messages:
+        # Still update the checkpoint even if no messages, so we don't re-scan the same lines
+        if total_lines > start_line:
+            mark_session_observed(session_id, slug, False, last_line=total_lines)
         return None
     observations, interaction_style = extract_observations(messages, slug)
 
@@ -177,7 +182,7 @@ def process_session(session_path: str, session_id: str, cwd: str) -> str | None:
             insert_observations(observations, session_id, slug)
         if interaction_style and isinstance(interaction_style, dict):
             insert_interaction_style(interaction_style, session_id, slug)
-        mark_session_observed(session_id, slug, has_obs)
+        mark_session_observed(session_id, slug, has_obs, last_line=total_lines)
     except Exception as e:
         log_error(f"DB write failed for session {session_id}: {e}")
 
@@ -226,12 +231,11 @@ def main():
     cc_project_dir = os.path.expanduser(f"~/.claude/projects/{cc_project_slug}")
     slugs_written = set()
 
-    # Process current session
+    # Process current session (always — uses line checkpoint to only parse new content)
     session_path = os.path.join(cc_project_dir, f"{session_id}.jsonl")
-    if not is_session_observed(session_id):
-        slug = process_session(session_path, session_id, cwd)
-        if slug:
-            slugs_written.add(slug)
+    slug = process_session(session_path, session_id, cwd)
+    if slug:
+        slugs_written.add(slug)
 
     # Catch up missed sessions (bounded to avoid expensive first-run)
     MAX_CATCHUP = 10
