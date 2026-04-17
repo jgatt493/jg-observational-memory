@@ -82,10 +82,15 @@ def init_db():
     conn.close()
 
 
+_db_initialized = False
+
+
 def get_connection() -> sqlite3.Connection:
-    """Get a connection to the SQLite database. Lazily creates DB if needed."""
-    if not os.path.exists(DB_PATH):
+    """Get a connection to the SQLite database. Runs init/migration on first call."""
+    global _db_initialized
+    if not _db_initialized:
         init_db()
+        _db_initialized = True
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
