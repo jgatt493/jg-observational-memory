@@ -66,8 +66,9 @@ CREATE INDEX IF NOT EXISTS idx_observations_durability ON observations(durabilit
 
 
 def init_db():
-    """Create the database and tables if they don't exist."""
+    """Create the database, tables, and memory directories if they don't exist."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(DB_PATH), "memory", "projects"), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.executescript(SCHEMA)
     conn.execute("PRAGMA journal_mode=WAL")
