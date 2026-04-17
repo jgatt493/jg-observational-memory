@@ -40,6 +40,36 @@ echo '[{"role":"user","content":"..."},{"role":"assistant","content":"..."}]' \
   | observational-memory observe-messages my-project
 ```
 
+## What the Output Looks Like
+
+After a few sessions, the reflector produces files like this:
+
+**Core rules** (`global.md`) — dense behavioral instructions for any AI agent:
+
+```
+git: always feature branches, never commit to main, never reuse merged branches.
+
+delegation: user delegates implementation with trust but expects clear scope
+confirmation before execution. Mandatory progress notes before every exit.
+
+root-cause-fixing: user dislikes workarounds that mask systemic problems.
+Demands fixes to underlying root causes rather than band-aids.
+
+testing: backend always requires tests. Frontend only requires E2E Playwright
+when explicitly asked. Treats tests as immutable specification.
+```
+
+**Contextual annotations** (`global_context.md`) — provenance and evolving patterns:
+
+```
+[incident:npm-timeout-bug] User escalated about CC session crashes — repeated
+across 3 sessions. Underlying preference promoted to core: rejects workarounds
+for systemic issues.
+
+[contextual:data-platform] Prefers script-based infra over HTTP services in
+this project — rejected API proposal in favor of CLI tools.
+```
+
 ## Data
 
 Everything lives at `~/.observational-memory/`:

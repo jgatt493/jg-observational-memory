@@ -1,7 +1,9 @@
 {"type":"progress","data":{"type":"hook_progress","hookEvent":"SessionStart"},"sessionId":"test-session-123","cwd":"/Users/test/Projects/myapp","timestamp":"2026-03-18T10:00:00Z","uuid":"aaa"}
 {"type":"system","message":{"role":"system","content":"System prompt here"},"uuid":"bbb","timestamp":"2026-03-18T10:00:01Z"}
 {"type":"user","message":{"role":"user","content":"I always want feature branches, never commit to main"},"uuid":"ccc","timestamp":"2026-03-18T10:00:02Z"}
-{"type":"assistant","message":{"role":"assistant","content":"Got it, I'll use feature branches."},"uuid":"ddd","timestamp":"2026-03-18T10:00:03Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Got it, I'll use feature branches."}]},"uuid":"ddd","timestamp":"2026-03-18T10:00:03Z"}
 {"type":"user","message":{"role":"user","content":"No, I said don't use mocks for database tests. Use real DB."},"uuid":"eee","timestamp":"2026-03-18T10:00:04Z"}
-{"type":"assistant","message":{"role":"assistant","content":"Understood, switching to real database for tests."},"uuid":"fff","timestamp":"2026-03-18T10:00:05Z"}
-{"type":"file-history-snapshot","messageId":"ggg","snapshot":{"messageId":"ggg","trackedFileBackups":{},"timestamp":"2026-03-18T10:00:06Z"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Understood, switching to real database for tests."}]},"uuid":"fff","timestamp":"2026-03-18T10:00:05Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_123","name":"Bash","input":{"command":"pytest"}}]},"uuid":"ggg","timestamp":"2026-03-18T10:00:06Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"All tests passed"}]},"uuid":"hhh","timestamp":"2026-03-18T10:00:07Z"}
+{"type":"file-history-snapshot","messageId":"iii","snapshot":{"messageId":"iii","trackedFileBackups":{},"timestamp":"2026-03-18T10:00:08Z"}}

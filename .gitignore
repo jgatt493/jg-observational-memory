@@ -5,10 +5,8 @@ __pycache__/
 dist/
 *.egg-info/
 
-# Generated memory files (personal data, not part of the package)
-memory/logs/
-memory/global.md
-memory/projects/*.md
+# Generated memory files (created at runtime, not part of the package)
+memory/
 
 # Slides (separate content)
 slides/

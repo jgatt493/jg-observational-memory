@@ -3,29 +3,21 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timezone
 
 import anthropic
 
 from observational_memory.api_key import resolve_api_key
+from observational_memory.config import MEMORY_ROOT, MODEL, log_error
 from observational_memory.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT
 from observational_memory.db import (
+    get_connection,
     get_observations_for_project,
     get_global_observations,
     get_all_projects,
     upsert_reflection,
 )
 
-MEMORY_ROOT = os.path.expanduser("~/.observational-memory/memory")
-ERROR_LOG = os.path.expanduser("~/.observational-memory/errors.log")
-MODEL = "claude-haiku-4-5-20251001"
 MAX_CHARS = 8000  # ~2000 tokens
-
-
-def log_error(msg: str):
-    os.makedirs(os.path.dirname(ERROR_LOG), exist_ok=True)
-    with open(ERROR_LOG, "a") as f:
-        f.write(f"[{datetime.now(timezone.utc).isoformat()}] {msg}\n")
 
 
 def read_synthesized_prose(md_path: str) -> str:
@@ -104,7 +96,6 @@ def synthesize(existing_core_prose: str, existing_context_prose: str, entries: l
 
 def get_max_observation_id(slug: str) -> int:
     """Get the max observation ID for a project (used for last_observation_id tracking)."""
-    from observational_memory.db import get_connection
     conn = get_connection()
     try:
         if slug == "global":

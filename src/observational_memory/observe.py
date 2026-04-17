@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import anthropic
 
 from observational_memory.api_key import resolve_api_key
+from observational_memory.config import MODEL, log_error
 from observational_memory.slugs import cc_slug, memory_slug
 from observational_memory.session_parser import parse_session
 from observational_memory.prompts import OBSERVER_SYSTEM_PROMPT, OBSERVER_USER_PROMPT
@@ -24,17 +25,8 @@ from observational_memory.db import (
     has_reflection,
 )
 
-MEMORY_ROOT = os.path.expanduser("~/.observational-memory/memory")
-ERROR_LOG = os.path.expanduser("~/.observational-memory/errors.log")
 REFLECTION_THRESHOLD = 50
 FIRST_REFLECTION_THRESHOLD = 10
-MODEL = "claude-haiku-4-5-20251001"
-
-
-def log_error(msg: str):
-    os.makedirs(os.path.dirname(ERROR_LOG), exist_ok=True)
-    with open(ERROR_LOG, "a") as f:
-        f.write(f"[{datetime.now(timezone.utc).isoformat()}] {msg}\n")
 
 
 def cwd_from_session_file(path: str) -> str | None:
@@ -241,20 +233,24 @@ def main():
         if slug:
             slugs_written.add(slug)
 
-    # Catch up missed sessions across ALL projects
+    # Catch up missed sessions (bounded to avoid expensive first-run)
+    MAX_CATCHUP = 10
+    caught_up = 0
     for sid, spath in find_all_cc_sessions():
+        if caught_up >= MAX_CATCHUP:
+            break
         if sid == session_id:
             continue
         try:
             if is_session_observed(sid):
                 continue
-            # Derive cwd from the session file itself
             session_cwd = cwd_from_session_file(spath)
             if not session_cwd:
                 continue
             slug = process_session(spath, sid, session_cwd)
             if slug:
                 slugs_written.add(slug)
+            caught_up += 1
         except Exception as e:
             log_error(f"Error processing missed session {sid}: {e}")
 

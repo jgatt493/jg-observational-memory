@@ -77,12 +77,12 @@ src/observational_memory/
 scripts/
   bootstrap-project.sh  # Creates CLAUDE.md in a new project
 skills/
-  jg-context.md      # Example skill file loaded by any agent
+  load-context.md      # Example skill file loaded by any agent
 tests/
   test_*.py          # Unit tests — mock API calls
 ```
 
 ## Design Specs
 
-- Original: `docs/superpowers/specs/2026-03-18-observational-memory-design.md`
-- SQLite migration: `docs/superpowers/specs/2026-04-13-sqlite-migration-pip-package.md`
+- Original: `docs/specs/2026-03-18-observational-memory-design.md`
+- SQLite migration: `docs/specs/2026-04-13-sqlite-migration-pip-package.md`
