@@ -1,5 +1,7 @@
 """Resolve ANTHROPIC_API_KEY from env or file path."""
 import os
+import stat
+import sys
 
 
 def resolve_api_key():
@@ -32,6 +34,14 @@ def resolve_api_key():
 
 def _read_key_file(path: str) -> str | None:
     try:
+        # Warn if key file is world-readable
+        file_stat = os.stat(path)
+        if file_stat.st_mode & (stat.S_IROTH | stat.S_IRGRP):
+            print(
+                f"  Warning: {path} is readable by other users. "
+                f"Run: chmod 600 {path}",
+                file=sys.stderr,
+            )
         with open(path) as f:
             key = f.read().strip()
             return key if key else None

@@ -1,6 +1,6 @@
-# jg-context — Personal Memory Skill
+# Observational Memory — Load Context
 
-You are working with Jeremy Gatt. Before proceeding with any work, check if his observational memory system is installed, then load his behavioral context.
+Before proceeding with any work, check if the observational memory system is installed, then load the user's behavioral context.
 
 ## Step 1: Check Installation
 
@@ -9,11 +9,11 @@ Check if `~/.observational-memory/memory.db` exists.
 **If it does NOT exist**, the observational memory system needs to be set up:
 
 1. Check if the `observational-memory` CLI is available: `which observational-memory`
-2. If not installed, install it from GitHub:
+2. If not installed, install it:
    ```
-   pip install --break-system-packages git+https://github.com/jgatt493/jg-observational-memory.git
+   pip install --break-system-packages observational-memory
    ```
-   If this fails due to access permissions, tell the user: "The observational memory repo is private. Ask Jeremy Gatt for access, or clone it manually and run `pip install .` from the repo root."
+   If pip fails with a permissions error, try with `--user` flag instead of `--break-system-packages`.
 3. Run `observational-memory install` to create directories, initialize the DB, and wire the Claude Code Stop hook.
 4. Ensure `ANTHROPIC_API_KEY` is set in the shell environment. If not, warn the user — the observer needs it to call Claude Haiku. Recommend adding it to `~/.zshenv`.
 5. Optionally backfill past sessions: `observational-memory backfill`

@@ -1457,7 +1457,7 @@ Change the path from `~/Projects/jg-observational-memory/memory/` to `~/.observa
 ```markdown
 # jg-context — Personal Memory Skill
 
-You are working with Jeremy Gatt. Before proceeding with any work, load his behavioral context.
+Before proceeding with any work, load the user's behavioral context from the observational memory system.
 
 ## Instructions
 
@@ -1604,7 +1604,7 @@ Add a `migrate-from-postgres` subparser that accepts `--host`, `--port`, `--dbna
 
 - [ ] **Step 2: Run migration**
 
-Run: `observational-memory migrate-from-postgres --host localhost --port 5433 --dbname om_memory --user jg --password REDACTED`
+Run: `observational-memory migrate-from-postgres --host localhost --dbname mydb --user myuser --password mypass`
 Expected: Reports counts per table.
 
 - [ ] **Step 3: Verify data**

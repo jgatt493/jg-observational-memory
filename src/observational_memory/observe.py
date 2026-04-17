@@ -220,7 +220,7 @@ def main():
     resolve_api_key()
     try:
         payload = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, Exception) as e:
+    except Exception as e:
         log_error(f"Failed to read stdin payload: {e}")
         sys.exit(0)
 

@@ -9,6 +9,27 @@ description = "Automatic behavioral profiling for Claude Code sessions"
 requires-python = ">=3.10"
 dependencies = ["anthropic>=0.49.0"]
 readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Jeremy Gatt"},
+]
+keywords = ["claude", "ai", "memory", "behavioral-profiling", "claude-code"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/jgatt493/jg-observational-memory"
+Repository = "https://github.com/jgatt493/jg-observational-memory"
+Issues = "https://github.com/jgatt493/jg-observational-memory/issues"
 
 [project.scripts]
 observational-memory = "observational_memory.cli:main"

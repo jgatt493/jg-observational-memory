@@ -117,7 +117,7 @@ from observer.slugs import cc_slug, memory_slug
 
 
 def test_cc_slug_basic():
-    assert cc_slug("/Users/jeremygatt/Projects/dg2") == "-Users-jeremygatt-Projects-dg2"
+    assert cc_slug("/Users/testuser/Projects/myapp") == "-Users-testuser-Projects-myapp"
 
 
 def test_cc_slug_preserves_leading_dash():
@@ -126,7 +126,7 @@ def test_cc_slug_preserves_leading_dash():
 
 
 def test_memory_slug_basic():
-    assert memory_slug("/Users/jeremygatt/Projects/dg2") == "dg2"
+    assert memory_slug("/Users/testuser/Projects/myapp") == "myapp"
 
 
 def test_memory_slug_lowercases():
@@ -967,7 +967,7 @@ git commit -m "feat: implement reflector with archive, truncation, and compressi
 ```markdown
 # jg-context — Personal Memory Skill
 
-You are working with Jeremy Gatt. Before proceeding with any work, load his behavioral context.
+Before proceeding with any work, load the user's behavioral context from the observational memory system.
 
 ## Instructions
 
@@ -1046,7 +1046,7 @@ Add to the existing `Stop` hooks array a second hook entry:
 ```json
 {
   "type": "command",
-  "command": "python3 /Users/jeremygatt/Projects/jg-observational-memory/observer/observe.py",
+  "command": "python3 /path/to/observational-memory/observer/observe.py",
   "timeout": 30
 }
 ```
@@ -1076,7 +1076,7 @@ Expected: All tests PASS
 Create a test script that simulates the Stop hook payload:
 
 ```bash
-echo '{"sessionId": "e8e10080-d7d5-4a71-9bbe-2d9b611553ec", "cwd": "/Users/jeremygatt/Projects/jg-observational-memory"}' | ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" python3 observer/observe.py
+echo '{"sessionId": "e8e10080-d7d5-4a71-9bbe-2d9b611553ec", "cwd": "/path/to/observational-memory"}' | ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" python3 observer/observe.py
 ```
 
 - [ ] **Step 3: Verify observations were written**

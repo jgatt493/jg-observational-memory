@@ -7,7 +7,7 @@
 
 ## Overview
 
-A personal observational memory system inspired by Mastra's OM pattern. Two background scripts (Observer and Reflector) maintain a compressed memory of Jeremy's preferences, corrections, and working patterns — per-project and globally — in a format any AI agent can read.
+A personal observational memory system inspired by Mastra's OM pattern. Two background scripts (Observer and Reflector) maintain a compressed memory of the user's preferences, corrections, and working patterns — per-project and globally — in a format any AI agent can read.
 
 The system is portable: no lock-in to Claude Code or any single agent medium. A skill file acts as the universal interface. Files are plain markdown (synthesized) and JSONL (raw logs), stored in this repository.
 
@@ -42,7 +42,7 @@ jg-observational-memory/
 │   └── projects/
 │       └── {memory-slug}.md                   # Synthesized prose per project
 ├── skills/
-│   └── jg-context.md                         # Universal skill loaded by any agent
+│   └── observational-memory context.md                         # Universal skill loaded by any agent
 ├── observer/
 │   ├── observe.py                             # Called by CC Stop hook
 │   └── reflect.py                            # Consolidates JSONL → dense prose
@@ -60,12 +60,12 @@ jg-observational-memory/
 Two slug concepts are used. It is important not to conflate them:
 
 **CC slug** — Claude Code's internal project identifier. Derived by replacing all `/` in the full working directory path with `-`. Used only to locate the CC session transcript file.
-- Example: `/Users/jeremygatt/Projects/dg2` → `-Users-jeremygatt-Projects-dg2`
+- Example: `/Users/alice/Projects/myapp` → `-Users-alice-Projects-myapp`
 - The leading `-` is correct and intentional — do **not** strip it. CC slug normalization is different from memory slug normalization.
 - Used in: `~/.claude/projects/{cc-slug}/{session-id}.jsonl`
 
 **Memory slug** — Our own identifier for memory files. Derived from the working directory basename: lowercase, spaces and special characters replaced with `-`, leading/trailing `-` stripped.
-- Example: `/Users/jeremygatt/Projects/DG Chat Server` → `dg-chat-server`
+- Example: `/Users/alice/Projects/My Chat Server` → `my-chat-server`
 - Used in: `memory/projects/{memory-slug}.md`, `memory/logs/projects/{memory-slug}.jsonl`
 
 ---
@@ -118,11 +118,11 @@ Two slug concepts are used. It is important not to conflate them:
 
 **Error handling:** Errors logged to `memory/logs/errors.log`, never fatal.
 
-### 3. Skill (`skills/jg-context.md`)
+### 3. Skill (`skills/observational-memory context.md`)
 
 A portable markdown skill loadable by any agent. Instructions:
 
-1. Read `memory/global.md` from `~/Projects/jg-observational-memory/` — **this path is hardcoded for this machine**. If the repo is cloned to a different path, update this line accordingly.
+1. Read `memory/global.md` from `~/.observational-memory/` — **this path is hardcoded for this machine**. If the repo is cloned to a different path, update this line accordingly.
 2. Derive memory slug from current working directory basename (lowercase, special chars → `-`)
 3. If `memory/projects/{slug}.md` exists, read it
 4. Inject global content first, then project content
@@ -134,7 +134,7 @@ A portable markdown skill loadable by any agent. Instructions:
 ### 4. CC Bootstrap (`scripts/bootstrap-project.sh`)
 
 A shell script run manually once when starting work in a new project directory. Creates a `CLAUDE.md` in the current directory with:
-- An instruction to load the `jg-context` skill from `~/Projects/jg-observational-memory/skills/jg-context.md`
+- An instruction to load the `observational-memory context` skill from `~/.observational-memory/skills/observational-memory context.md`
 - The global CC memory entry (added once to `~/.claude/CLAUDE.md`) reminds the user to run this script for any new project
 
 ---
@@ -173,7 +173,7 @@ reflect.py {slug}
 ### Session Start (any agent)
 
 ```
-Agent loads jg-context skill
+Agent loads observational-memory context skill
   → reads memory/global.md
   → derives memory slug from working directory basename
   → if memory/projects/{slug}.md exists → reads it
@@ -189,7 +189,7 @@ Agent loads jg-context skill
 {
   "ts": "2026-03-18T10:23:00Z",
   "session": "abc123",
-  "project": "dg2",
+  "project": "myapp",
   "scope": "project | global",
   "type": "preference | correction | pattern | decision",
   "content": "user corrected agent: always use feature branches, never commit to main"
@@ -231,7 +231,7 @@ The Observer appends one additional record per session with `type: "interaction_
 {
   "ts": "2026-03-18T10:23:00Z",
   "session": "abc123",
-  "project": "dg2",
+  "project": "myapp",
   "scope": "project",
   "type": "interaction_style",
   "content": {

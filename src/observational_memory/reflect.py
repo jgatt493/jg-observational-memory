@@ -30,7 +30,8 @@ def log_error(msg: str):
 
 def read_synthesized_prose(md_path: str) -> str:
     try:
-        return open(md_path).read()
+        with open(md_path) as f:
+            return f.read()
     except FileNotFoundError:
         return ""
 

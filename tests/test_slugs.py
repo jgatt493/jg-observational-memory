@@ -2,7 +2,7 @@ from observational_memory.slugs import cc_slug, memory_slug
 
 
 def test_cc_slug_basic():
-    assert cc_slug("/Users/jeremygatt/Projects/dg2") == "-Users-jeremygatt-Projects-dg2"
+    assert cc_slug("/Users/testuser/Projects/myapp") == "-Users-testuser-Projects-myapp"
 
 
 def test_cc_slug_preserves_leading_dash():
@@ -11,7 +11,7 @@ def test_cc_slug_preserves_leading_dash():
 
 
 def test_memory_slug_basic():
-    assert memory_slug("/Users/jeremygatt/Projects/dg2") == "dg2"
+    assert memory_slug("/Users/testuser/Projects/myapp") == "myapp"
 
 
 def test_memory_slug_lowercases():

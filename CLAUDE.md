@@ -15,7 +15,7 @@ That's it. The install command creates `~/.observational-memory/`, initializes a
 
 **1. The system (what you're developing here):** Observer + Reflector pipeline, SQLite storage, session parsing, prompt engineering. Python package in `src/observational_memory/`.
 
-**2. The output (what other projects consume):** `~/.observational-memory/memory/global.md` and `~/.observational-memory/memory/projects/{slug}.md` — dense behavioral profiles loaded via `skills/jg-context.md`.
+**2. The output (what other projects consume):** `~/.observational-memory/memory/global.md` and `~/.observational-memory/memory/projects/{slug}.md` — dense behavioral profiles loaded via skill file or SessionStart hook.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ CC Stop hook → python -m observational_memory.observe (stdin: {sessionId, cwd}
   → parses session transcript from ~/.claude/projects/{cc-slug}/{session-id}.jsonl
   → calls Haiku to extract observations + interaction style scores
   → writes to SQLite (~/.observational-memory/memory.db)
-  → if unprocessed entries > 100, fires reflector as subprocess
+  → if unprocessed entries exceed threshold (10 first time, 50 ongoing), fires reflector as subprocess
 
 observational-memory reflect {slug}
   → reads existing prose + observations from SQLite
@@ -35,9 +35,9 @@ observational-memory reflect {slug}
 
 ## Key Concepts
 
-**CC slug** — full path with `/` → `-` (e.g. `-Users-jeremygatt-Projects-dg2`). Locates CC session files. Leading `-` is intentional.
+**CC slug** — full path with `/` → `-` (e.g. `-Users-alice-Projects-myapp`). Locates CC session files. Leading `-` is intentional.
 
-**Memory slug** — basename, lowercased, special chars → `-`, stripped (e.g. `dg2`, `dg-chat-server`). Used for memory file naming.
+**Memory slug** — basename, lowercased, special chars → `-`, stripped (e.g. `myapp`, `chat-server`). Used for memory file naming.
 
 **Observation types:** preference, correction, pattern, decision. Corrections are treated as firm rules by the reflector.
 
@@ -50,13 +50,14 @@ SQLite at `~/.observational-memory/memory.db`. Schema defined in `src/observatio
 ## CLI Commands
 
 ```bash
-observational-memory install          # set up everything
-observational-memory uninstall        # remove hook, preserve data
-observational-memory backfill         # process all past CC sessions
-observational-memory reflect --all    # re-synthesize all projects
-observational-memory reflect {slug}   # re-synthesize one project
-observational-memory --version        # print version
-pytest                                # run tests (no API or DB needed)
+observational-memory install                    # set up everything
+observational-memory uninstall                  # remove hook, preserve data
+observational-memory backfill                   # process all past CC sessions
+observational-memory reflect --all              # re-synthesize all projects
+observational-memory reflect {slug}             # re-synthesize one project
+observational-memory observe-messages {slug}    # observe messages from stdin (JSON array)
+observational-memory --version                  # print version
+pytest                                          # run tests (no API or DB needed)
 ```
 
 ## File Layout
@@ -65,6 +66,7 @@ pytest                                # run tests (no API or DB needed)
 src/observational_memory/
   __init__.py        # Version constant
   __main__.py        # python -m support
+  api_key.py         # Resolves ANTHROPIC_API_KEY from env, file, or default
   cli.py             # CLI entry points
   db.py              # SQLite layer
   observe.py         # Observer — CC Stop hook entrypoint
@@ -75,7 +77,7 @@ src/observational_memory/
 scripts/
   bootstrap-project.sh  # Creates CLAUDE.md in a new project
 skills/
-  jg-context.md      # Portable skill loaded by any agent
+  jg-context.md      # Example skill file loaded by any agent
 tests/
   test_*.py          # Unit tests — mock API calls
 ```

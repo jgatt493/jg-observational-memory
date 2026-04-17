@@ -285,7 +285,7 @@ The reflector currently has three modes: legacy JSONL-based, `--from-db` single 
 
 ---
 
-## Migration Path (for existing users — i.e., Jeremy)
+## Migration Path (for existing Postgres users)
 
 A one-time migration script (`cli.py migrate-from-postgres`) that:
 

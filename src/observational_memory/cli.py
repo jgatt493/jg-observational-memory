@@ -248,7 +248,7 @@ def do_observe_messages(project: str, session_id: str | None = None):
     try:
         raw = sys.stdin.read()
         messages = json.loads(raw)
-    except (json.JSONDecodeError, Exception) as e:
+    except Exception as e:
         print(f"  ✗ Failed to parse stdin as JSON: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -303,10 +303,10 @@ def main():
 
     migrate_parser = subparsers.add_parser("migrate-from-postgres", help="Migrate data from Postgres")
     migrate_parser.add_argument("--host", default="localhost")
-    migrate_parser.add_argument("--port", default="5433")
-    migrate_parser.add_argument("--dbname", default="om_memory")
-    migrate_parser.add_argument("--user", default="jg")
-    migrate_parser.add_argument("--password", default="REDACTED")
+    migrate_parser.add_argument("--port", default="5432")
+    migrate_parser.add_argument("--dbname", required=True, help="Postgres database name")
+    migrate_parser.add_argument("--user", required=True, help="Postgres username")
+    migrate_parser.add_argument("--password", required=True, help="Postgres password")
 
     args = parser.parse_args()
 

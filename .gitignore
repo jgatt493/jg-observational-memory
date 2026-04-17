@@ -12,3 +12,6 @@ memory/projects/*.md
 
 # Slides (separate content)
 slides/
+
+# API key file
+.api-key
