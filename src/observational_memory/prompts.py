@@ -159,3 +159,33 @@ Here are observations to integrate (with durability and trigger metadata):
 ---
 
 Produce the updated output with ===CORE=== and ===CONTEXTUAL=== sections. Core section max 8000 characters. [CORRECTION] entries are firm rules that must appear in core."""
+
+REFLECTOR_PROJECT_USER_PROMPT = """The following GLOBAL rules already exist and are loaded for every session. Do NOT restate, paraphrase, or repeat any of these — they are already in effect. Only include project-specific rules that add NEW information not covered by the global profile.
+
+## Global rules (already active — do not repeat):
+
+{global_core_prose}
+
+---
+
+Here are the current project-specific core rules (may be empty if first reflection):
+
+{existing_core_prose}
+
+---
+
+Here is the current project-specific contextual prose (may be empty):
+
+{existing_context_prose}
+
+---
+
+Here are observations to integrate (with durability and trigger metadata):
+
+{observations}
+
+---
+
+Produce the updated output with ===CORE=== and ===CONTEXTUAL=== sections. Core section max 8000 characters. [CORRECTION] entries are firm rules that must appear in core.
+
+IMPORTANT: If an observation is already fully covered by a global rule, do NOT include it. Only include rules that are project-specific additions, refinements with project-specific detail, or contradictions to global behavior in this project's context."""

@@ -8,7 +8,7 @@ import anthropic
 
 from observational_memory.api_key import resolve_api_key
 from observational_memory.config import MEMORY_ROOT, MODEL, log_error
-from observational_memory.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT
+from observational_memory.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT, REFLECTOR_PROJECT_USER_PROMPT
 from observational_memory.db import (
     get_connection,
     get_observations_for_project,
@@ -69,8 +69,12 @@ def parse_tiered_output(text: str) -> tuple[str, str | None]:
         return core, None
 
 
-def synthesize(existing_core_prose: str, existing_context_prose: str, entries: list[dict]) -> str:
-    """Call Haiku to synthesize observations into tiered prose."""
+def synthesize(existing_core_prose: str, existing_context_prose: str, entries: list[dict], global_core_prose: str | None = None) -> str:
+    """Call Haiku to synthesize observations into tiered prose.
+
+    If global_core_prose is provided, uses the project-specific prompt that
+    instructs the reflector to avoid restating global rules.
+    """
     observations_text = "\n".join(
         f"[{e.get('durability', 'unknown')}] "
         f"{'[CORRECTION] ' if e.get('type') == 'correction' else ''}"
@@ -79,17 +83,26 @@ def synthesize(existing_core_prose: str, existing_context_prose: str, entries: l
         for e in entries
     )
     client = anthropic.Anthropic()
+
+    if global_core_prose:
+        user_content = REFLECTOR_PROJECT_USER_PROMPT.format(
+            global_core_prose=global_core_prose,
+            existing_core_prose=existing_core_prose or "(no existing rules)",
+            existing_context_prose=existing_context_prose or "(no existing context)",
+            observations=observations_text,
+        )
+    else:
+        user_content = REFLECTOR_USER_PROMPT.format(
+            existing_core_prose=existing_core_prose or "(no existing rules)",
+            existing_context_prose=existing_context_prose or "(no existing context)",
+            observations=observations_text,
+        )
+
     response = client.messages.create(
         model=MODEL,
         max_tokens=8192,
         system=REFLECTOR_SYSTEM_PROMPT,
-        messages=[
-            {"role": "user", "content": REFLECTOR_USER_PROMPT.format(
-                existing_core_prose=existing_core_prose or "(no existing rules)",
-                existing_context_prose=existing_context_prose or "(no existing context)",
-                observations=observations_text,
-            )}
-        ],
+        messages=[{"role": "user", "content": user_content}],
     )
     return response.content[0].text
 
@@ -128,7 +141,13 @@ def reflect_slug(slug: str, entries: list[dict], md_path: str | None = None):
     existing_core = read_synthesized_prose(md_path)
     existing_context = read_synthesized_prose(context_path)
 
-    raw_output = synthesize(existing_core, existing_context, entries)
+    # For project reflections, pass global prose so the reflector can avoid restating it
+    global_core_prose = None
+    if slug != "global":
+        global_md_path = os.path.join(MEMORY_ROOT, "global.md")
+        global_core_prose = read_synthesized_prose(global_md_path) or None
+
+    raw_output = synthesize(existing_core, existing_context, entries, global_core_prose=global_core_prose)
     core_prose, context_prose = parse_tiered_output(raw_output)
 
     # Validate and compress core section only
