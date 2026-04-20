@@ -30,8 +30,20 @@ REFLECTION_THRESHOLD = 50
 FIRST_REFLECTION_THRESHOLD = 10
 
 
+# Paths that indicate ephemeral/temp sessions (worktrees, tmp dirs, etc.)
+_EPHEMERAL_PATH_PREFIXES = ("/private/tmp/", "/tmp/", "/var/folders/")
+
+
+def is_ephemeral_cwd(cwd: str) -> bool:
+    """Return True if the cwd looks like a temporary/ephemeral worktree, not a real project."""
+    return any(cwd.startswith(prefix) for prefix in _EPHEMERAL_PATH_PREFIXES)
+
+
 def cwd_from_session_file(path: str) -> str | None:
-    """Extract the cwd from the first record in a CC session JSONL file."""
+    """Extract the cwd from the first record in a CC session JSONL file.
+
+    Returns None for ephemeral/temp paths (worktrees, tmp dirs).
+    """
     try:
         with open(path) as f:
             for line in f:
@@ -41,6 +53,8 @@ def cwd_from_session_file(path: str) -> str | None:
                 record = json.loads(line)
                 cwd = record.get("cwd")
                 if cwd:
+                    if is_ephemeral_cwd(cwd):
+                        return None
                     return cwd
     except (FileNotFoundError, json.JSONDecodeError):
         pass
@@ -227,6 +241,9 @@ def main():
     cwd = payload.get("cwd", "")
     if not session_id or not cwd:
         log_error(f"Missing sessionId or cwd in payload: {payload}")
+        sys.exit(0)
+
+    if is_ephemeral_cwd(cwd):
         sys.exit(0)
 
     cc_project_slug = cc_slug(cwd)
