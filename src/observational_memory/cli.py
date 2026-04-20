@@ -129,9 +129,12 @@ def do_uninstall(config_root: str | None = None):
 
 def do_backfill():
     """Process all unobserved CC sessions."""
+    from observational_memory.api_key import resolve_api_key
     from observational_memory.observe import find_all_cc_sessions, process_session, cwd_from_session_file, log_error
     from observational_memory.db import is_session_observed
     import time
+
+    resolve_api_key()
 
     sessions = find_all_cc_sessions()
     print(f"Found {len(sessions)} session files across all CC projects.")
