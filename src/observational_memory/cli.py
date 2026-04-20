@@ -197,24 +197,40 @@ def do_backfill():
 
 def do_reflect(slug: str | None = None, reflect_all: bool = False):
     """Synthesize observations into dense prose."""
+    from observational_memory.api_key import resolve_api_key
     from observational_memory.reflect import reflect_slug
     from observational_memory.db import get_observations_for_project, get_global_observations, get_all_projects
+    import time
+
+    resolve_api_key()
 
     if reflect_all:
         projects = get_all_projects()
-        print(f"Reflecting {len(projects)} projects + global...")
+        total = len(projects) + 1  # +1 for global
+        print(f"Reflecting {len(projects)} projects + global...\n")
+        start_time = time.time()
+
         global_entries = get_global_observations()
+        print(f"  [1/{total}] global ({len(global_entries)} observations)...")
         reflect_slug("global", global_entries)
-        for project in projects:
+
+        for i, project in enumerate(projects, 2):
             entries = get_observations_for_project(project)
+            print(f"  [{i}/{total}] {project} ({len(entries)} observations)...")
             reflect_slug(project, entries)
-        print("Done.")
+
+        elapsed = time.time() - start_time
+        mins, secs = divmod(int(elapsed), 60)
+        print(f"\nDone in {mins}m{secs:02d}s. Reflected {total} profiles.")
     elif slug:
+        print(f"Reflecting {slug}...")
         if slug == "global":
             entries = get_global_observations()
         else:
             entries = get_observations_for_project(slug)
+        print(f"  {len(entries)} observations to synthesize...")
         reflect_slug(slug, entries)
+        print("Done.")
     else:
         print("Usage: om reflect <slug> or --all")
         sys.exit(1)
