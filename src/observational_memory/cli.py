@@ -69,7 +69,7 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
         settings = {}
 
     hook_command = "python -m observational_memory.observe"
-    new_hook = {"hooks": [{"type": "command", "command": hook_command, "timeout": 30}]}
+    new_hook = {"hooks": [{"type": "command", "command": hook_command, "timeout": 30, "async": True}]}
 
     hooks = settings.setdefault("hooks", {})
     stop_hooks = hooks.setdefault("Stop", [])
