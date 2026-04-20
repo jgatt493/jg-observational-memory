@@ -137,42 +137,61 @@ def do_backfill():
     resolve_api_key()
 
     sessions = find_all_cc_sessions()
-    print(f"Found {len(sessions)} session files across all CC projects.")
+    total = len(sessions)
+    print(f"Found {total} session files across all CC projects.\n")
 
     skipped = processed = failed = 0
-    total = len(sessions)
+    start_time = time.time()
+
+    def _progress(i):
+        elapsed = time.time() - start_time
+        mins, secs = divmod(int(elapsed), 60)
+        rate = processed / elapsed if elapsed > 0 and processed > 0 else 0
+        print(
+            f"\r  [{i}/{total}] "
+            f"processed: {processed}  skipped: {skipped}  failed: {failed}  "
+            f"({mins}m{secs:02d}s, {rate:.1f} sess/s)",
+            end="", flush=True,
+        )
 
     for i, (sid, spath) in enumerate(sessions, 1):
         try:
             if is_session_observed(sid):
                 skipped += 1
+                _progress(i)
                 continue
         except Exception as e:
             log_error(f"Backfill DB check failed for {sid}: {e}")
             failed += 1
+            _progress(i)
             continue
 
         cwd = cwd_from_session_file(spath)
         if not cwd:
             skipped += 1
+            _progress(i)
             continue
 
         try:
             slug = process_session(spath, sid, cwd)
             if slug:
                 processed += 1
-                print(f"  [{i}/{total}] {slug} <- session {sid[:8]}...")
+                print(f"\r  [{i}/{total}] \u2713 {slug} <- {sid[:8]}...{' ' * 20}")
             else:
                 skipped += 1
         except Exception as e:
             log_error(f"Backfill error for session {sid}: {e}")
             failed += 1
-            print(f"  [{i}/{total}] FAILED session {sid[:8]}... — {e}")
+            print(f"\r  [{i}/{total}] \u2717 FAILED {sid[:8]}... \u2014 {e}{' ' * 20}")
+
+        _progress(i)
 
         if processed > 0 and processed % 5 == 0:
             time.sleep(1)
 
-    print(f"\nDone. Processed: {processed}, Skipped: {skipped}, Failed: {failed}")
+    elapsed = time.time() - start_time
+    mins, secs = divmod(int(elapsed), 60)
+    print(f"\n\nDone in {mins}m{secs:02d}s. Processed: {processed}, Skipped: {skipped}, Failed: {failed}")
 
 
 def do_reflect(slug: str | None = None, reflect_all: bool = False):
