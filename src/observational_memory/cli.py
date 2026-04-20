@@ -46,7 +46,7 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
                     print("  Options:")
                     print('    • export ANTHROPIC_API_KEY="sk-ant-..." in ~/.zshenv')
                     print("    • echo 'sk-ant-...' > ~/.observational-memory/.api-key")
-                    print("    • Re-run: observational-memory install")
+                    print("    • Re-run: om install")
                     print()
                     print("  Continuing install without API key...")
             else:
@@ -94,8 +94,8 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
     print("  Observations will be extracted automatically after each Claude Code session.")
     print()
     print("  Optional next steps:")
-    print("  • Backfill past sessions:    observational-memory backfill")
-    print("  • Synthesize all profiles:   observational-memory reflect --all")
+    print("  • Backfill past sessions:    om backfill")
+    print("  • Synthesize all profiles:   om reflect --all")
 
 
 def do_uninstall(config_root: str | None = None):
@@ -124,7 +124,7 @@ def do_uninstall(config_root: str | None = None):
     om_dir = os.path.join(root, ".observational-memory")
     print("  ✓ Removed Stop hook from Claude Code settings")
     print(f"  Data preserved at {om_dir} — delete manually if desired.")
-    print("  Then: pip uninstall observational-memory")
+    print("  To fully remove: pip uninstall observational-memory")
 
 
 def do_backfill():
@@ -193,7 +193,7 @@ def do_reflect(slug: str | None = None, reflect_all: bool = False):
             entries = get_observations_for_project(slug)
         reflect_slug(slug, entries)
     else:
-        print("Usage: observational-memory reflect <slug> or --all")
+        print("Usage: om reflect <slug> or --all")
         sys.exit(1)
 
 

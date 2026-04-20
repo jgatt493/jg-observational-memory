@@ -6,7 +6,7 @@ Pip-installable system that watches Claude Code sessions, extracts behavioral ob
 
 ```bash
 pip install observational-memory
-observational-memory install
+om install
 ```
 
 That's it. The install command creates `~/.observational-memory/`, initializes a SQLite database, and wires a Claude Code Stop hook. Only requires `ANTHROPIC_API_KEY` in your shell env.
@@ -26,7 +26,7 @@ CC Stop hook → python -m observational_memory.observe (stdin: {sessionId, cwd}
   → writes to SQLite (~/.observational-memory/memory.db)
   → if unprocessed entries exceed threshold (10 first time, 50 ongoing), fires reflector as subprocess
 
-observational-memory reflect {slug}
+om reflect {slug}
   → reads existing prose + observations from SQLite
   → calls Haiku to synthesize a full prose rewrite (max 8000 chars)
   → writes ~/.observational-memory/memory/projects/{slug}.md or global.md
@@ -50,15 +50,17 @@ SQLite at `~/.observational-memory/memory.db`. Schema defined in `src/observatio
 ## CLI Commands
 
 ```bash
-observational-memory install                    # set up everything
-observational-memory uninstall                  # remove hook, preserve data
-observational-memory backfill                   # process all past CC sessions
-observational-memory reflect --all              # re-synthesize all projects
-observational-memory reflect {slug}             # re-synthesize one project
-observational-memory observe-messages {slug}    # observe messages from stdin (JSON array)
-observational-memory --version                  # print version
-pytest                                          # run tests (no API or DB needed)
+om install                    # set up everything
+om uninstall                  # remove hook, preserve data
+om backfill                   # process all past CC sessions
+om reflect --all              # re-synthesize all projects
+om reflect {slug}             # re-synthesize one project
+om observe-messages {slug}    # observe messages from stdin (JSON array)
+om --version                  # print version
+pytest                        # run tests (no API or DB needed)
 ```
+
+`om` is a short alias for `observational-memory` — both work.
 
 ## File Layout
 

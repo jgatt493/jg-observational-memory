@@ -33,6 +33,7 @@ Issues = "https://github.com/jgatt493/jg-observational-memory/issues"
 
 [project.scripts]
 observational-memory = "observational_memory.cli:main"
+om = "observational_memory.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/observational_memory"]
