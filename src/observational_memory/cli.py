@@ -10,31 +10,48 @@ from observational_memory import __version__
 from observational_memory.db import DB_PATH, init_db
 
 
-def do_install(config_root: str | None = None):
+def do_install(config_root: str | None = None, no_key_check: bool = False):
     """Install observational memory: create dirs, init DB, wire hook."""
+    from observational_memory.api_key import resolve_api_key
+
     root = config_root or os.path.expanduser("~")
     om_dir = os.path.join(root, ".observational-memory")
     memory_dir = os.path.join(om_dir, "memory", "projects")
     os.makedirs(memory_dir, exist_ok=True)
 
-    # Check for API key — hard requirement (skip with --no-key-check)
-    if "--no-key-check" not in sys.argv and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  ✗ ANTHROPIC_API_KEY is not set.")
-        print()
-        print("  The observer calls Claude Haiku to extract observations from sessions.")
-        print("  Without this key, the hook will silently fail on every session.")
-        print()
-        print("  Fix: Add to ~/.zshenv (sourced by all shells including hook subprocesses):")
-        print()
-        print('    export ANTHROPIC_API_KEY="sk-ant-..."')
-        print()
-        print("  Alternatives:")
-        print("    • Put key in a file:  echo 'sk-ant-...' > ~/.observational-memory/.api-key")
-        print("    • Or set a custom path: export ANTHROPIC_API_KEY_FILE=/path/to/key")
-        print("    • Skip this check:   observational-memory install --no-key-check")
-        print()
-        print("  The key must be available to non-interactive shells when the Stop hook fires.")
-        sys.exit(1)
+    # Check for API key — try file-based resolution first
+    if not no_key_check:
+        resolve_api_key()
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            # Interactive: prompt for the key
+            if sys.stdin.isatty():
+                print()
+                print("  ANTHROPIC_API_KEY is required for the observer (calls Claude Haiku).")
+                print("  Enter your key below — it will be saved to ~/.observational-memory/.api-key")
+                print()
+                try:
+                    key = input("  API key: ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    key = ""
+                if key:
+                    key_path = os.path.join(om_dir, ".api-key")
+                    with open(key_path, "w") as f:
+                        f.write(key + "\n")
+                    os.chmod(key_path, 0o600)
+                    os.environ["ANTHROPIC_API_KEY"] = key
+                    print("  ✓ API key saved to ~/.observational-memory/.api-key")
+                else:
+                    print()
+                    print("  ⚠ No key provided. The observer won't work until you set one.")
+                    print("  Options:")
+                    print('    • export ANTHROPIC_API_KEY="sk-ant-..." in ~/.zshenv')
+                    print("    • echo 'sk-ant-...' > ~/.observational-memory/.api-key")
+                    print("    • Re-run: observational-memory install")
+                    print()
+                    print("  Continuing install without API key...")
+            else:
+                # Non-interactive (hook): skip silently, install anyway
+                pass
 
     # Init DB
     init_db()
@@ -289,7 +306,8 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("install", help="Set up observational memory")
+    install_parser = subparsers.add_parser("install", help="Set up observational memory")
+    install_parser.add_argument("--no-key-check", action="store_true", help="Skip ANTHROPIC_API_KEY check")
     subparsers.add_parser("uninstall", help="Remove the Claude Code hook")
     subparsers.add_parser("backfill", help="Process all past Claude Code sessions")
 
@@ -311,7 +329,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "install":
-        do_install()
+        do_install(no_key_check=args.no_key_check)
     elif args.command == "uninstall":
         do_uninstall()
     elif args.command == "backfill":

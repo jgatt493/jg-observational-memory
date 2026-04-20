@@ -13,17 +13,29 @@ def fake_api_key():
         yield
 
 
-def test_install_fails_without_api_key(tmp_path):
-    """Install must hard-fail when ANTHROPIC_API_KEY is not set."""
+def test_install_proceeds_without_api_key_non_interactive(tmp_path):
+    """Install proceeds without API key in non-interactive mode (no tty)."""
+    config_root = str(tmp_path)
+    with patch.dict(os.environ, {}, clear=True), \
+         patch("observational_memory.cli.DB_PATH", str(tmp_path / "memory.db")), \
+         patch("observational_memory.cli.init_db"), \
+         patch("sys.stdin") as mock_stdin:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        mock_stdin.isatty.return_value = False
+        # Should not raise — non-interactive installs proceed without key
+        do_install(config_root=config_root)
+    assert (tmp_path / ".observational-memory").is_dir()
+
+
+def test_install_skips_key_check_with_flag(tmp_path):
+    """Install with no_key_check=True skips API key validation entirely."""
     config_root = str(tmp_path)
     with patch.dict(os.environ, {}, clear=True), \
          patch("observational_memory.cli.DB_PATH", str(tmp_path / "memory.db")), \
          patch("observational_memory.cli.init_db"):
-        # Remove the key explicitly
         os.environ.pop("ANTHROPIC_API_KEY", None)
-        with pytest.raises(SystemExit) as exc_info:
-            do_install(config_root=config_root)
-        assert exc_info.value.code == 1
+        do_install(config_root=config_root, no_key_check=True)
+    assert (tmp_path / ".observational-memory").is_dir()
 
 
 def test_install_creates_dirs(tmp_path):
