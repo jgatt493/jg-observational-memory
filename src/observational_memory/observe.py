@@ -215,6 +215,8 @@ def find_all_cc_sessions() -> list[tuple[str, str]]:
 
 def main():
     resolve_api_key()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        sys.exit(0)
     try:
         payload = json.loads(sys.stdin.read())
     except Exception as e:
