@@ -30,7 +30,8 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
                 print("  Enter your key below — it will be saved to ~/.observational-memory/.api-key")
                 print()
                 try:
-                    key = input("  API key: ").strip()
+                    from getpass import getpass
+                    key = getpass("  API key: ").strip()
                 except (EOFError, KeyboardInterrupt):
                     key = ""
                 if key:
