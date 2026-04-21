@@ -13,7 +13,7 @@ Watches your Claude Code conversations, extracts observations about how you work
 ## Quickstart
 
 ```bash
-pip install observational-memory
+pip install git+https://github.com/jgatt493/jg-observational-memory.git
 om install
 ```
 
