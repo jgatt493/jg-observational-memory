@@ -8,7 +8,13 @@ import anthropic
 
 from observational_memory.api_key import resolve_api_key
 from observational_memory.config import MEMORY_ROOT, MODEL, log_error
-from observational_memory.prompts import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_USER_PROMPT, REFLECTOR_PROJECT_USER_PROMPT
+from observational_memory.prompts import (
+    REFLECTOR_SYSTEM_PROMPT,
+    REFLECTOR_USER_PROMPT,
+    REFLECTOR_PROJECT_USER_PROMPT,
+    CONSOLIDATOR_SYSTEM_PROMPT,
+    CONSOLIDATOR_USER_PROMPT,
+)
 from observational_memory.db import (
     get_connection,
     get_observations_for_project,
@@ -177,6 +183,39 @@ def reflect_slug(slug: str, entries: list[dict], md_path: str | None = None):
 
     print(f"  {slug}: {len(entries)} observations -> {len(core_prose)} chars core" +
           (f", {len(context_prose)} chars context" if context_prose else ""))
+
+    # Auto-consolidate after global reflection
+    if slug == "global":
+        print("  Running consolidation pass on global profile...")
+        consolidate_global()
+
+
+def consolidate_global():
+    """Consolidate global.md — merge redundant rules, tighten prose."""
+    global_md = os.path.join(MEMORY_ROOT, "global.md")
+    prose = read_synthesized_prose(global_md)
+    if not prose:
+        print("  No global.md to consolidate.")
+        return
+
+    before_len = len(prose)
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=8192,
+        system=CONSOLIDATOR_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": CONSOLIDATOR_USER_PROMPT.format(prose=prose)}],
+    )
+    consolidated = response.content[0].text.strip()
+
+    if not validate_token_length(consolidated):
+        log_error(f"Consolidated global exceeded {MAX_CHARS} chars ({len(consolidated)}), compressing")
+        consolidated = compress_prose(consolidated)
+
+    with open(global_md, "w") as f:
+        f.write(consolidated)
+
+    print(f"  global: consolidated {before_len} -> {len(consolidated)} chars")
 
 
 def main():

@@ -236,6 +236,17 @@ def do_reflect(slug: str | None = None, reflect_all: bool = False):
         sys.exit(1)
 
 
+def do_consolidate():
+    """Consolidate the global profile — merge redundant rules."""
+    from observational_memory.api_key import resolve_api_key
+    from observational_memory.reflect import consolidate_global
+
+    resolve_api_key()
+    print("Consolidating global profile...")
+    consolidate_global()
+    print("Done.")
+
+
 def do_migrate_from_postgres(host: str, port: str, dbname: str, user: str, password: str):
     """One-time migration from existing Postgres database."""
     try:
@@ -358,6 +369,8 @@ def main():
     reflect_parser.add_argument("slug", nargs="?", help="Project slug to reflect")
     reflect_parser.add_argument("--all", action="store_true", help="Reflect all projects + global")
 
+    subparsers.add_parser("consolidate", help="Consolidate the global profile (merge redundant rules)")
+
     migrate_parser = subparsers.add_parser("migrate-from-postgres", help="Migrate data from Postgres")
     migrate_parser.add_argument("--host", default="localhost")
     migrate_parser.add_argument("--port", default="5432")
@@ -377,6 +390,8 @@ def main():
         do_observe_messages(project=args.project, session_id=args.session_id)
     elif args.command == "reflect":
         do_reflect(slug=args.slug, reflect_all=args.all)
+    elif args.command == "consolidate":
+        do_consolidate()
     elif args.command == "migrate-from-postgres":
         do_migrate_from_postgres(args.host, args.port, args.dbname, args.user, args.password)
     else:

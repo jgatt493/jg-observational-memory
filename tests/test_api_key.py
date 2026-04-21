@@ -33,9 +33,11 @@ def test_resolve_from_default_path(tmp_path):
         assert os.environ["ANTHROPIC_API_KEY"] == "sk-from-default"
 
 
-def test_resolve_no_key_does_not_crash():
+def test_resolve_no_key_does_not_crash(tmp_path):
     """If no key found anywhere, silently return."""
-    with patch.dict(os.environ, {}, clear=True):
+    fake_path = str(tmp_path / "nonexistent" / ".api-key")
+    with patch.dict(os.environ, {}, clear=True), \
+         patch("observational_memory.api_key.os.path.expanduser", return_value=fake_path):
         os.environ.pop("ANTHROPIC_API_KEY", None)
         os.environ.pop("ANTHROPIC_API_KEY_FILE", None)
         resolve_api_key()  # should not raise

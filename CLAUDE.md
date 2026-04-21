@@ -55,6 +55,7 @@ om uninstall                  # remove hook, preserve data
 om backfill                   # process all past CC sessions
 om reflect --all              # re-synthesize all projects
 om reflect {slug}             # re-synthesize one project
+om consolidate                # merge redundant rules in global profile
 om observe-messages {slug}    # observe messages from stdin (JSON array)
 om --version                  # print version
 pytest                        # run tests (no API or DB needed)

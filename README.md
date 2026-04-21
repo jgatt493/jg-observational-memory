@@ -28,6 +28,7 @@ observational-memory install                  # set up database + Claude Code ho
 observational-memory uninstall                # remove hook, keep data
 observational-memory backfill                 # process all past sessions
 observational-memory reflect --all            # re-synthesize all profiles
+observational-memory consolidate             # merge redundant rules in global profile
 observational-memory observe-messages <slug>  # observe messages from stdin (JSON array)
 ```
 
@@ -69,6 +70,46 @@ for systemic issues.
 [contextual:data-platform] Prefers script-based infra over HTTP services in
 this project — rejected API proposal in favor of CLI tools.
 ```
+
+## How This Compares to Claude Code's Built-in Memory
+
+Claude Code has its own memory system (`/memory` command, auto-memory in `CLAUDE.md` project files). That system stores what the AI decides to remember — project facts, architectural decisions, user preferences it noticed. It's useful, but it has limitations:
+
+- **AI-initiated**: Claude decides what's worth remembering. If it doesn't notice a pattern, it's lost.
+- **Per-project**: Memories live in project-scoped `CLAUDE.md` files. Preferences you demonstrate in one project don't carry over to another unless you manually copy them.
+- **Conversation-scoped**: The AI writes memories during a session. If you correct something and the AI doesn't explicitly save it, the correction evaporates.
+
+Observational memory works differently:
+
+- **Systematic**: Every session is processed. The observer extracts what happened, not what the AI thought was important.
+- **Cross-project**: Global observations accumulate across all projects into a single behavioral profile.
+- **Durable by design**: Observations are classified by durability (durable, contextual, incident) and stored in SQLite. The reflector synthesizes them into prose rules, promoting patterns that recur and demoting one-off incidents.
+- **User-focused**: The observer only tracks how *you* work — preferences, corrections, communication style — never project facts or architecture decisions.
+
+The two systems are complementary. Claude Code's memory handles project-specific context (file paths, architecture, conventions). Observational memory handles *you* — how you like to work, what you've corrected, what patterns you repeat across every project.
+
+## Cost
+
+Everything runs on Claude Haiku, which keeps costs negligible. Based on real usage (~150 sessions/month):
+
+| Component | Calls/month | Est. cost |
+|-----------|------------|-----------|
+| Observer (per session) | ~150 | ~$0.80 |
+| Reflector (per threshold) | ~12 | ~$0.15 |
+| Consolidator (per global reflect) | ~6 | ~$0.06 |
+| **Total** | | **~$1.00/month** |
+
+That's about $0.007 per session. The observer is the bulk of the cost since it runs on every session, but Haiku's input pricing ($0.80/MTok) keeps even heavy users well under $2/month. The reflector and consolidator fire infrequently — only when enough new observations accumulate — so they're essentially free.
+
+For comparison, a single medium-length Claude Sonnet conversation costs more than an entire month of observational memory.
+
+## Session Discovery and Data Durability
+
+The observer scans `~/.claude/projects/{slug}/` for session JSONL files one level deep — it picks up top-level session files but intentionally skips subagent transcripts nested in `{session_id}/subagents/`. Subagent sessions are AI-to-AI conversations with no direct user interaction, so they contain no behavioral signal worth extracting.
+
+Claude Code manages its own session file lifecycle and prunes old JSONL files after roughly 30 days. This means the number of session files on disk stays roughly constant — new sessions appear, old ones get cleaned up.
+
+This doesn't matter for observational memory. The Stop hook fires after every session ends, processing the transcript in real-time and writing observations to SQLite before Claude Code ever cleans up the file. The `om backfill` command exists as a safety net for sessions the hook missed (e.g., if the hook wasn't installed yet, or if it errored). Once a session is in the database, the JSONL file can disappear — all the behavioral data has already been extracted and is durable in SQLite.
 
 ## Data
 

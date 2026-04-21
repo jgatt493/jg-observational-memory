@@ -149,3 +149,45 @@ def test_reflect_slug_fallback_no_delimiters(tmp_path):
 
     args, kwargs = mock_upsert.call_args
     assert kwargs.get("context_prose") is None
+
+
+def test_consolidate_global_rewrites_file(tmp_path):
+    """consolidate_global should call the API and rewrite global.md."""
+    global_md = tmp_path / "global.md"
+    global_md.write_text("rule-a: do thing.\n\nrule-b: also do thing (same as rule-a).")
+
+    with patch("observational_memory.reflect.MEMORY_ROOT", str(tmp_path)), \
+         patch("observational_memory.reflect.anthropic") as mock_anthropic:
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="rule-a: do thing. (Includes former rule-b.)")]
+        mock_anthropic.Anthropic.return_value.messages.create.return_value = mock_response
+
+        from observational_memory.reflect import consolidate_global
+        consolidate_global()
+
+    assert global_md.read_text() == "rule-a: do thing. (Includes former rule-b.)"
+
+
+def test_consolidate_global_no_file(tmp_path, capsys):
+    """consolidate_global should handle missing global.md gracefully."""
+    with patch("observational_memory.reflect.MEMORY_ROOT", str(tmp_path)):
+        from observational_memory.reflect import consolidate_global
+        consolidate_global()
+
+    assert "No global.md" in capsys.readouterr().out
+
+
+def test_reflect_slug_global_triggers_consolidation(tmp_path):
+    """reflect_slug for 'global' should auto-run consolidation."""
+    md_path = str(tmp_path / "global.md")
+    entries = [{"type": "preference", "content": "likes tests", "durability": "durable", "trigger_summary": "stated"}]
+
+    with patch("observational_memory.reflect.synthesize", return_value="===CORE===\ntesting: always write tests"), \
+         patch("observational_memory.reflect.upsert_reflection"), \
+         patch("observational_memory.reflect.get_max_observation_id", return_value=42), \
+         patch("observational_memory.reflect.MEMORY_ROOT", str(tmp_path)), \
+         patch("observational_memory.reflect.consolidate_global") as mock_consolidate:
+        from observational_memory.reflect import reflect_slug
+        reflect_slug("global", entries, md_path)
+
+    mock_consolidate.assert_called_once()

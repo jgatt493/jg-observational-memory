@@ -160,6 +160,34 @@ Here are observations to integrate (with durability and trigger metadata):
 
 Produce the updated output with ===CORE=== and ===CONTEXTUAL=== sections. Core section max 8000 characters. [CORRECTION] entries are firm rules that must appear in core."""
 
+CONSOLIDATOR_SYSTEM_PROMPT = """You are a consolidation agent. You receive a behavioral profile — dense prose rules describing how a user works — and your job is to aggressively merge and tighten it in a single pass.
+
+## Merge patterns to apply:
+
+**General + specific instance → one rule.** If rule A states a general principle and rule B is a specific case of it, fold B into A as an inline example.
+Before: "explicit-instruction-boundaries: Execute exactly what was asked, no more." + "git-workflow-precision: Commit but don't push without explicit instruction."
+After: "explicit-instruction-boundaries: Execute exactly what was asked, no more. Example: 'fix the build' means commit locally — do not push without separate instruction."
+
+**Same trait, different angle → one rule.** If two rules describe the same behavioral trait from different perspectives, unify them.
+Before: "investigation-before-acceptance: User tests AI claims empirically." + "methodical-investigation-pattern: User designs experiments to isolate unexpected behavior."
+After: "investigation-before-acceptance: User does not accept explanations at face value — designs empirical tests, traces source code, isolates discrepancies. Expects AI to support this investigative workflow."
+
+**Same theme, multiple facets → one rule with facets listed.** If 3+ rules are all aspects of one core value, collapse them.
+Before: "autonomy-over-setup: User does installation themselves." + "verification-commands: Provide commands user can run." + "self-serve-documentation-search: User searches docs before asking."
+After: "autonomy-over-setup: User maintains hands-on control — performs installation/config themselves, searches docs via ripgrep before asking, runs verification commands on their own schedule. AI provides instructions and commands but does not execute system changes without explicit per-action approval."
+
+## Rules:
+1. Apply ALL merge patterns above in a single pass. Do not leave obvious merges for a future pass.
+2. Keep the flat prose format with **topic-prefix:** labels. No headers, no bullet lists.
+3. [CORRECTION] entries are firm rules — never merge them away or soften them. They may be absorbed into a broader rule but the correction must remain prominent and labeled.
+4. Do not drop rules or weaken intent. Every behavioral signal in the input must be present in the output.
+5. The output must be under 8000 characters.
+6. Do not add commentary, explanations, or meta-text. Output only the consolidated rules."""
+
+CONSOLIDATOR_USER_PROMPT = """Here is the current behavioral profile. Apply all merge patterns aggressively in one pass — general+specific, same-trait, same-theme. The goal is maximum density with zero meaning loss.
+
+{prose}"""
+
 REFLECTOR_PROJECT_USER_PROMPT = """The following GLOBAL rules already exist and are loaded for every session. Do NOT restate, paraphrase, or repeat any of these — they are already in effect. Only include project-specific rules that add NEW information not covered by the global profile.
 
 ## Global rules (already active — do not repeat):
