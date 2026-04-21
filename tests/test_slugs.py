@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from observational_memory.slugs import cc_slug, memory_slug
 
 
@@ -28,3 +30,31 @@ def test_memory_slug_strips_special_chars():
 
 def test_memory_slug_strips_leading_trailing_dashes():
     assert memory_slug("/Users/foo/Projects/-my-project-") == "my-project"
+
+
+def test_memory_slug_uses_project_root():
+    """When cwd is inside a project root, use first path component relative to root."""
+    with patch("observational_memory.slugs.get_project_roots", return_value=["/Users/alice/Projects"]):
+        assert memory_slug("/Users/alice/Projects/my-app") == "my-app"
+        assert memory_slug("/Users/alice/Projects/my-app/packages/core") == "my-app"
+        assert memory_slug("/Users/alice/Projects/labs-deepgram/apps/chat-blt") == "labs-deepgram"
+
+
+def test_memory_slug_falls_back_to_basename():
+    """When cwd is not inside any project root, fall back to basename."""
+    with patch("observational_memory.slugs.get_project_roots", return_value=["/Users/alice/Projects"]):
+        assert memory_slug("/tmp/scratch/experiment") == "experiment"
+
+
+def test_memory_slug_multiple_roots():
+    """Matches against multiple configured roots."""
+    roots = ["/Users/alice/Projects", "/Users/alice/work"]
+    with patch("observational_memory.slugs.get_project_roots", return_value=roots):
+        assert memory_slug("/Users/alice/work/client-app/src") == "client-app"
+        assert memory_slug("/Users/alice/Projects/my-app") == "my-app"
+
+
+def test_memory_slug_no_roots_configured():
+    """With no roots configured, always uses basename."""
+    with patch("observational_memory.slugs.get_project_roots", return_value=[]):
+        assert memory_slug("/Users/alice/Projects/my-app/packages/core") == "core"

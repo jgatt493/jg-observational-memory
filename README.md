@@ -23,7 +23,7 @@ pip install git+https://github.com/jgatt493/jg-observational-memory.git
 om install
 ```
 
-The `install` command creates `~/.observational-memory/`, initializes a SQLite database, wires a Claude Code Stop hook, and prompts for your API key if one isn't found. That's it — observation starts automatically on your next Claude Code session.
+The `install` command creates `~/.observational-memory/`, initializes a SQLite database, wires a Claude Code Stop hook, and prompts for your API key and project root directory. That's it — observation starts automatically on your next Claude Code session.
 
 Both `om` and `observational-memory` work as CLI commands. All examples below use `om` for brevity.
 
@@ -226,12 +226,32 @@ This doesn't matter for observational memory. The Stop hook fires after every se
 
 Everything lives at `~/.observational-memory/`:
 - `memory.db` — SQLite database
+- `config.json` — configuration (project roots, etc.)
 - `memory/global.md` — cross-project behavioral rules (core)
 - `memory/global_context.md` — cross-project contextual annotations
 - `memory/projects/{slug}.md` — per-project rules (core)
 - `memory/projects/{slug}_context.md` — per-project contextual annotations
 
-## API Key
+## Configuration
+
+### Project roots
+
+The observer needs to know where your projects live to derive the correct project slug from a session's working directory. During `om install`, you're prompted for your primary project directory (e.g., `~/Projects`). This is stored in `~/.observational-memory/config.json`:
+
+```json
+{
+  "project_roots": [
+    "/Users/alice/Projects",
+    "/Users/alice/work"
+  ]
+}
+```
+
+You can add multiple roots by editing the file directly. This matters for monorepos and nested projects — if you're working in `~/Projects/labs-deepgram/apps/chat-blt`, the observer uses the first path component relative to the project root (`labs-deepgram`) rather than the deepest directory (`chat-blt`).
+
+If no project roots are configured, the observer falls back to using the basename of the working directory.
+
+### API Key
 
 Three ways to provide the key (checked in order):
 1. `ANTHROPIC_API_KEY` environment variable

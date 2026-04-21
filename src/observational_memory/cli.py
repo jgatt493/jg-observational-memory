@@ -7,6 +7,7 @@ import os
 import sys
 
 from observational_memory import __version__
+from observational_memory.config import load_config, save_config
 from observational_memory.db import DB_PATH, init_db
 
 
@@ -57,6 +58,28 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
     # Init DB
     init_db()
     print("  ✓ Initialized SQLite database")
+
+    # Prompt for project root directory
+    config = load_config()
+    existing_roots = config.get("project_roots", [])
+    if not existing_roots and sys.stdin.isatty():
+        print()
+        print("  Where do you keep your projects? This helps the observer identify")
+        print("  which directory a session belongs to. You can add more later in")
+        print("  ~/.observational-memory/config.json")
+        print()
+        default_root = os.path.expanduser("~/Projects")
+        try:
+            root_input = input(f"  Project root [{default_root}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            root_input = ""
+        project_root = root_input or default_root
+        project_root = os.path.expanduser(project_root)
+        config["project_roots"] = [project_root]
+        save_config(config)
+        print(f"  ✓ Project root set to {project_root}")
+    elif existing_roots:
+        print(f"  ✓ Project roots: {', '.join(existing_roots)}")
 
     # Wire CC Stop hook
     claude_dir = os.path.join(root, ".claude")
