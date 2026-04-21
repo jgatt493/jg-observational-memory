@@ -2,7 +2,13 @@
 
 Automatic behavioral profiling for Claude Code sessions.
 
-Watches your Claude Code conversations, extracts observations about how you work (preferences, corrections, patterns), and synthesizes them into dense prose rules that any AI agent can load — so it already knows how you work.
+## Why this exists
+
+Mastra published an article on observational memory as a pattern for AI agents — the idea that instead of being told what to remember, an agent silently watches interactions and builds up its own understanding over time. It's the most human-like form of memory: not explicit instructions, but learned patterns from repeated exposure.
+
+That got me thinking. If this is the best way for an agent to learn how someone works, why are we only applying it to agents? The most highly functioning agent in any coding session is the human. You already have patterns, preferences, corrections you repeat across every project. The problem is that every new AI session starts from zero — it doesn't know you prefer feature branches, or that you'll correct it for pushing without permission, or that you get frustrated when it over-engineers.
+
+So I built this. It watches your Claude Code sessions, extracts observations about how *you* work, and synthesizes them into a portable behavioral profile that any AI agent can load. The AI stops guessing and starts knowing — not because you told it, but because it watched.
 
 ## Requirements
 
