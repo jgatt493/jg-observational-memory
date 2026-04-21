@@ -31,8 +31,8 @@ For each observation, classify it:
 - "decision": a decision about HOW to work (not what to build)
 
 For each observation, determine scope:
-- "global": applies across all projects (e.g., git workflow, testing philosophy, communication style)
-- "project": specific to how the user works in this particular project
+- "global": applies across all projects (e.g., git workflow, testing philosophy, communication style). A global observation must be about a TRANSFERABLE behavior — something the user would do the same way in any project. If the evidence comes from one project's specific domain (a particular business, client, or use case), default to "project" even if the underlying trait seems general. The reflector will promote it later if the pattern recurs across projects.
+- "project": specific to how the user works in this particular project, or tied to a specific domain/business context. When in doubt, choose "project" — it's safer to under-promote than to pollute the global profile with project-specific details.
 
 ## Interaction Style
 
