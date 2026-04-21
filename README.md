@@ -4,32 +4,122 @@ Automatic behavioral profiling for Claude Code sessions.
 
 Watches your Claude Code conversations, extracts observations about how you work (preferences, corrections, patterns), and synthesizes them into dense prose rules that any AI agent can load — so it already knows how you work.
 
-## Install
+## Requirements
+
+- Python 3.10+
+- An Anthropic API key (for Claude Haiku calls — [costs ~$1/month](#cost))
+- Claude Code (for automatic session observation)
+
+## Quickstart
 
 ```bash
 pip install observational-memory
-observational-memory install
+om install
 ```
 
-Requires an `ANTHROPIC_API_KEY` — set it in your shell environment, or put it in `~/.observational-memory/.api-key`.
+The `install` command creates `~/.observational-memory/`, initializes a SQLite database, wires a Claude Code Stop hook, and prompts for your API key if one isn't found. That's it — observation starts automatically on your next Claude Code session.
 
-## How it works
+Both `om` and `observational-memory` work as CLI commands. All examples below use `om` for brevity.
 
-1. A Claude Code Stop hook fires after every session
-2. The observer sends the conversation to Claude Haiku, extracting behavioral observations with durability tags (durable, contextual, incident)
-3. Observations accumulate in a local SQLite database
-4. After 10 observations (first time) or 50 (ongoing), the reflector synthesizes them into a tiered prose profile — core rules and contextual annotations
-5. Any AI agent can load the profile via the included skill file or a SessionStart hook
+### Backfill existing sessions
+
+If you've been using Claude Code before installing, pull in your history:
+
+```bash
+om backfill
+```
+
+This scans `~/.claude/projects/` for past session transcripts and processes any that haven't been observed yet. Safe to run repeatedly — it skips sessions already in the database.
+
+### Generate your first profiles
+
+After backfill (or after enough sessions accumulate naturally), synthesize the observations into prose:
+
+```bash
+om reflect --all
+```
+
+This produces behavioral profiles at `~/.observational-memory/memory/global.md` (cross-project rules) and `~/.observational-memory/memory/projects/{slug}.md` (per-project rules). In normal operation, this happens automatically once enough observations accumulate (10 for first reflection, 50 ongoing).
+
+## Loading Profiles Into Claude Code
+
+The profiles are only useful if Claude Code reads them. Three options, from simplest to most automatic:
+
+### Option 1: Skill file (recommended)
+
+Download the skill file into your Claude Code skills directory:
+
+```bash
+mkdir -p ~/.claude/skills
+curl -sL https://raw.githubusercontent.com/jgatt493/jg-observational-memory/main/skills/load-context.md \
+  -o ~/.claude/skills/observational-memory.md
+```
+
+Then in any Claude Code session, run `/observational-memory` to load your behavioral profile. You can also ask Claude to "load observational memory" and it will follow the skill instructions.
+
+### Option 2: Project CLAUDE.md
+
+Add a reference to your project's `CLAUDE.md` so Claude loads the profile automatically:
+
+```markdown
+## Observational Memory
+
+This project uses observational memory. Load the behavioral context before starting work:
+
+1. Read `~/.observational-memory/memory/global.md` for global behavioral rules.
+2. Derive the project slug from this directory's basename (lowercase, special chars → `-`).
+3. If `~/.observational-memory/memory/projects/{slug}.md` exists, read it too.
+4. Treat both as firm behavioral rules — project overrides global on conflict.
+```
+
+A bootstrap script is included in the repo to do this automatically:
+
+```bash
+cd /path/to/your/project
+curl -sL https://raw.githubusercontent.com/jgatt493/jg-observational-memory/main/scripts/bootstrap-project.sh | bash
+```
+
+### Option 3: SessionStart hook
+
+Wire a Claude Code SessionStart hook that reads the profiles on every new conversation. Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat ~/.observational-memory/memory/global.md 2>/dev/null; PROJECT=$(basename \"$PWD\" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g; s/^-//; s/-$//'); cat ~/.observational-memory/memory/projects/${PROJECT}.md 2>/dev/null; true"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## How It Works
+
+1. A Claude Code **Stop hook** fires after every session ends
+2. The **observer** sends the conversation to Claude Haiku, extracting behavioral observations with durability tags (durable, contextual, incident)
+3. Observations accumulate in a local **SQLite database**
+4. After enough observations accumulate (10 first time, 50 ongoing), the **reflector** synthesizes them into a tiered prose profile — core rules and contextual annotations
+5. After global reflection, the **consolidator** merges redundant rules for maximum density
+6. Any AI agent can load the profile via skill file, CLAUDE.md reference, or SessionStart hook
 
 ## Commands
 
 ```bash
-observational-memory install                  # set up database + Claude Code hook
-observational-memory uninstall                # remove hook, keep data
-observational-memory backfill                 # process all past sessions
-observational-memory reflect --all            # re-synthesize all profiles
-observational-memory consolidate             # merge redundant rules in global profile
-observational-memory observe-messages <slug>  # observe messages from stdin (JSON array)
+om install                  # set up database + Claude Code hook
+om uninstall                # remove hook, keep data
+om backfill                 # process all past sessions
+om reflect --all            # re-synthesize all profiles
+om reflect <slug>           # re-synthesize one project (or "global")
+om consolidate              # merge redundant rules in global profile
+om observe-messages <slug>  # observe messages from stdin (JSON array)
+om --version                # print version
 ```
 
 ## External Integration
@@ -38,7 +128,7 @@ Pipe conversations from any source (Discord bots, chat services, etc.):
 
 ```bash
 echo '[{"role":"user","content":"..."},{"role":"assistant","content":"..."}]' \
-  | observational-memory observe-messages my-project
+  | om observe-messages my-project
 ```
 
 ## What the Output Looks Like
