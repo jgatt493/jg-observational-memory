@@ -11,5 +11,9 @@ memory/
 # Slides (separate content)
 slides/
 
+# Database files
+*.db
+*.sqlite
+
 # API key file
 .api-key

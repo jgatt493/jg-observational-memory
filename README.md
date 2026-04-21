@@ -79,7 +79,21 @@ cd /path/to/your/project
 curl -sL https://raw.githubusercontent.com/jgatt493/jg-observational-memory/main/scripts/bootstrap-project.sh | bash
 ```
 
-### Option 3: SessionStart hook
+### Option 3: Global CLAUDE.md
+
+Claude Code supports a user-level `~/.claude/CLAUDE.md` that loads automatically in every session, across all projects. You can symlink the global profile there:
+
+```bash
+ln -s ~/.observational-memory/memory/global.md ~/.claude/CLAUDE.md
+```
+
+This is the simplest zero-maintenance option — every Claude Code session will load your behavioral rules natively with no hooks or plugins required. The tradeoff is that it only loads the global profile, not project-specific rules or contextual annotations. If you already have a `~/.claude/CLAUDE.md` with other instructions, you can append a reference instead:
+
+```bash
+echo -e "\n## Observational Memory\n\nRead ~/.observational-memory/memory/global.md and apply as firm behavioral rules." >> ~/.claude/CLAUDE.md
+```
+
+### Option 4: SessionStart hook
 
 Wire a Claude Code SessionStart hook that reads the profiles on every new conversation. Add this to `~/.claude/settings.json`:
 
@@ -163,11 +177,12 @@ this project — rejected API proposal in favor of CLI tools.
 
 ## How This Compares to Claude Code's Built-in Memory
 
-Claude Code has its own memory system (`/memory` command, auto-memory in `CLAUDE.md` project files). That system stores what the AI decides to remember — project facts, architectural decisions, user preferences it noticed. It's useful, but it has limitations:
+Claude Code has its own memory system (`/memory` command, auto-memory in project-scoped `CLAUDE.md` files). That system stores what the AI decides to remember — project facts, architectural decisions, user preferences it noticed. It's useful, but it has limitations:
 
 - **AI-initiated**: Claude decides what's worth remembering. If it doesn't notice a pattern, it's lost.
 - **Per-project**: Memories live in project-scoped `CLAUDE.md` files. Preferences you demonstrate in one project don't carry over to another unless you manually copy them.
 - **Conversation-scoped**: The AI writes memories during a session. If you correct something and the AI doesn't explicitly save it, the correction evaporates.
+- **No global user profile**: Claude Code supports a user-level `~/.claude/CLAUDE.md` that loads in every session — but it doesn't exist by default and nothing creates or populates it. There is no built-in mechanism for building a cross-project understanding of how you work. The feature exists, but the gap between "supported" and "useful" is entirely on you to fill.
 
 Observational memory works differently:
 

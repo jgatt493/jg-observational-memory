@@ -26,6 +26,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
 Homepage = "https://github.com/jgatt493/jg-observational-memory"
 Repository = "https://github.com/jgatt493/jg-observational-memory"
