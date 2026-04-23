@@ -71,6 +71,43 @@ def strip_code_fences(text: str) -> str:
     return text
 
 
+def extract_json_block(text: str) -> str | None:
+    """Extract the first balanced JSON object from text.
+
+    Handles trailing prose, markdown fences, and preamble text.
+    Returns the JSON string or None if no balanced block found.
+    """
+    text = strip_code_fences(text)
+    # Find the first '{' and track brace depth to find the matching '}'
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if escape:
+            escape = False
+            continue
+        if c == "\\":
+            if in_string:
+                escape = True
+            continue
+        if c == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
 def maybe_trigger_reflection(slug: str):
     """Spawn the reflector if unprocessed observation count exceeds the threshold."""
     count = get_unprocessed_count(slug)
@@ -130,7 +167,7 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
     client = anthropic.Anthropic()
     response = client.messages.create(
         model=MODEL,
-        max_tokens=4096,
+        max_tokens=8192,
         system=OBSERVER_SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": OBSERVER_USER_PROMPT.format(
@@ -140,11 +177,15 @@ def extract_observations(messages: list[dict], project: str) -> tuple[list[dict]
             )}
         ],
     )
-    text = strip_code_fences(response.content[0].text)
+    raw_text = response.content[0].text
+    json_str = extract_json_block(raw_text)
+    if not json_str:
+        log_error(f"No JSON object found in observer response: {raw_text[:500]}")
+        return [], None
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(json_str)
     except json.JSONDecodeError:
-        log_error(f"Failed to parse observer response as JSON: {text[:500]}")
+        log_error(f"Failed to parse observer response as JSON: {json_str[:500]}")
         return [], None
 
     # Handle new format: {"observations": [...], "interaction_style": {...}}

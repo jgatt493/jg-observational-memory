@@ -87,6 +87,8 @@ Return a JSON object with two keys:
   }
 }
 
+IMPORTANT: Output ONLY the JSON object. No preamble, no trailing text, no rationale, no markdown fences, no explanation. Your entire response must be valid JSON and nothing else.
+
 If there are no meaningful observations, return an empty array for observations. Always return interaction_style scores.
 
 Be highly selective with observations:

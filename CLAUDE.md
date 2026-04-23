@@ -51,6 +51,7 @@ SQLite at `~/.observational-memory/memory.db`. Schema defined in `src/observatio
 
 ```bash
 om install                    # set up everything
+om update                     # update to latest + re-wire hook
 om uninstall                  # remove hook, preserve data
 om backfill                   # process all past CC sessions
 om reflect --all              # re-synthesize all projects

@@ -326,6 +326,47 @@ def do_migrate_from_postgres(host: str, port: str, dbname: str, user: str, passw
     print("\n  Migration complete!")
 
 
+def do_update():
+    """Update observational-memory to the latest version from GitHub and re-wire hook."""
+    import shutil
+    import subprocess
+
+    repo_url = "git+https://github.com/jgatt493/jg-observational-memory.git"
+    print(f"  Current version: {__version__}")
+    print("  Updating from GitHub...")
+
+    # Strategy 1: pip install --upgrade
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", repo_url],
+        capture_output=True, text=True,
+    )
+
+    # Strategy 2: if PEP 668 blocks it, retry with --break-system-packages
+    if result.returncode != 0 and "externally-managed-environment" in result.stderr:
+        print("  System Python detected, retrying with --break-system-packages...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade",
+             "--break-system-packages", repo_url],
+            capture_output=True, text=True,
+        )
+
+    if result.returncode != 0:
+        print(f"  ✗ pip install failed:\n{result.stderr.strip()}")
+        sys.exit(1)
+
+    # Re-read version from the freshly installed package
+    from importlib.metadata import version as pkg_version
+    new_version = pkg_version("observational-memory")
+    if new_version == __version__:
+        print(f"  Already on latest version ({__version__}).")
+    else:
+        print(f"  ✓ Updated {__version__} → {new_version}")
+
+    # Re-wire hook in case format changed
+    print("  Re-wiring hook...")
+    do_install(no_key_check=True)
+
+
 def do_observe_messages(project: str, session_id: str | None = None):
     """Observe messages from stdin. Accepts JSON array of {role, content} objects."""
     import uuid
@@ -381,6 +422,7 @@ def main():
 
     install_parser = subparsers.add_parser("install", help="Set up observational memory")
     install_parser.add_argument("--no-key-check", action="store_true", help="Skip ANTHROPIC_API_KEY check")
+    subparsers.add_parser("update", help="Update to latest version from GitHub")
     subparsers.add_parser("uninstall", help="Remove the Claude Code hook")
     subparsers.add_parser("backfill", help="Process all past Claude Code sessions")
 
@@ -405,6 +447,8 @@ def main():
 
     if args.command == "install":
         do_install(no_key_check=args.no_key_check)
+    elif args.command == "update":
+        do_update()
     elif args.command == "uninstall":
         do_uninstall()
     elif args.command == "backfill":

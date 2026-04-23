@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 from observational_memory.observe import (
     cwd_from_session_file,
+    extract_json_block,
     strip_code_fences,
 )
 
@@ -36,6 +37,35 @@ def test_strip_code_fences_json():
 def test_strip_code_fences_plain():
     text = '[{"scope": "global"}]'
     assert strip_code_fences(text) == text
+
+
+def test_extract_json_block_clean():
+    text = '{"observations": [], "interaction_style": {}}'
+    assert json.loads(extract_json_block(text)) == json.loads(text)
+
+
+def test_extract_json_block_trailing_prose():
+    text = '{"observations": []} \n\n**Rationale:** The user prefers...'
+    result = extract_json_block(text)
+    assert json.loads(result) == {"observations": []}
+
+
+def test_extract_json_block_preamble_and_fences():
+    text = '```json\n{"observations": []}\n```\nSome extra text'
+    result = extract_json_block(text)
+    assert json.loads(result) == {"observations": []}
+
+
+def test_extract_json_block_no_json():
+    text = "Done. Skill is wired up and ready to go."
+    assert extract_json_block(text) is None
+
+
+def test_extract_json_block_nested_braces():
+    text = '{"observations": [{"content": "uses {curly} braces"}]}'
+    result = extract_json_block(text)
+    parsed = json.loads(result)
+    assert parsed["observations"][0]["content"] == "uses {curly} braces"
 
 
 def test_main_reads_snake_case_session_id():
