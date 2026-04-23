@@ -11,7 +11,7 @@ from observational_memory.config import load_config, save_config
 from observational_memory.db import DB_PATH, init_db
 
 
-def do_install(config_root: str | None = None, no_key_check: bool = False):
+def do_install(config_root: str | None = None, no_key_check: bool = False, quiet: bool = False):
     """Install observational memory: create dirs, init DB, wire hook."""
     from observational_memory.api_key import resolve_api_key
 
@@ -59,10 +59,10 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
     init_db()
     print("  ✓ Initialized SQLite database")
 
-    # Prompt for project root directory
+    # Prompt for project root directory (skip during update)
     config = load_config()
     existing_roots = config.get("project_roots", [])
-    if not existing_roots and sys.stdin.isatty():
+    if not quiet and not existing_roots and sys.stdin.isatty():
         print()
         print("  Where do you keep your projects? This helps the observer identify")
         print("  which directory a session belongs to. You can add more later in")
@@ -112,14 +112,15 @@ def do_install(config_root: str | None = None, no_key_check: bool = False):
             json.dump(settings, f, indent=2)
         print("  ✓ Wired Claude Code Stop hook")
 
-    print()
-    print("  ✓ Setup complete!")
-    print()
-    print("  Observations will be extracted automatically after each Claude Code session.")
-    print()
-    print("  Optional next steps:")
-    print("  • Backfill past sessions:    om backfill")
-    print("  • Synthesize all profiles:   om reflect --all")
+    if not quiet:
+        print()
+        print("  ✓ Setup complete!")
+        print()
+        print("  Observations will be extracted automatically after each Claude Code session.")
+        print()
+        print("  Optional next steps:")
+        print("  • Backfill past sessions:    om backfill")
+        print("  • Synthesize all profiles:   om reflect --all")
 
 
 def do_uninstall(config_root: str | None = None):
@@ -328,16 +329,16 @@ def do_migrate_from_postgres(host: str, port: str, dbname: str, user: str, passw
 
 def do_update():
     """Update observational-memory to the latest version from GitHub and re-wire hook."""
-    import shutil
     import subprocess
 
     repo_url = "git+https://github.com/jgatt493/jg-observational-memory.git"
+    pip_base = [sys.executable, "-m", "pip", "install", "--upgrade", "--no-cache-dir"]
     print(f"  Current version: {__version__}")
     print("  Updating from GitHub...")
 
     # Strategy 1: pip install --upgrade
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--upgrade", repo_url],
+        pip_base + [repo_url],
         capture_output=True, text=True,
     )
 
@@ -345,8 +346,7 @@ def do_update():
     if result.returncode != 0 and "externally-managed-environment" in result.stderr:
         print("  System Python detected, retrying with --break-system-packages...")
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade",
-             "--break-system-packages", repo_url],
+            pip_base + ["--break-system-packages", repo_url],
             capture_output=True, text=True,
         )
 
@@ -354,17 +354,21 @@ def do_update():
         print(f"  ✗ pip install failed:\n{result.stderr.strip()}")
         sys.exit(1)
 
-    # Re-read version from the freshly installed package
-    from importlib.metadata import version as pkg_version
-    new_version = pkg_version("observational-memory")
+    # Get the newly installed version via subprocess — importlib.metadata
+    # caches the old version in the current process
+    version_result = subprocess.run(
+        [sys.executable, "-c",
+         "from importlib.metadata import version; print(version('observational-memory'))"],
+        capture_output=True, text=True,
+    )
+    new_version = version_result.stdout.strip() if version_result.returncode == 0 else "unknown"
     if new_version == __version__:
         print(f"  Already on latest version ({__version__}).")
     else:
         print(f"  ✓ Updated {__version__} → {new_version}")
 
     # Re-wire hook in case format changed
-    print("  Re-wiring hook...")
-    do_install(no_key_check=True)
+    do_install(no_key_check=True, quiet=True)
 
 
 def do_observe_messages(project: str, session_id: str | None = None):
